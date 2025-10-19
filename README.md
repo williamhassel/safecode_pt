@@ -1,2 +1,2 @@
 # safecode_pt
-Proto type development for the master thesis
+Prototype development for the master thesis
