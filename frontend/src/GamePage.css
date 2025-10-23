@@ -1,0 +1,135 @@
+/* Basic page layout (matches screenshot proportions) */
+.page-root {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+  text-align: center;
+  max-width: 1100px;
+  margin: 24px auto;
+  padding: 0 20px 80px;
+  color: #111;
+}
+
+.top-links {
+  text-align: left;
+  margin-bottom: 6px;
+}
+.top-links a { color: #3b2d9b; text-decoration: underline; font-size: 14px; }
+
+.title {
+  margin-top: 4px;
+  font-size: 22px;
+  font-weight: 700;
+}
+
+/* instructions above the godot iframe */
+.instructions {
+  max-width: 760px;
+  margin: 18px auto;
+  font-size: 15px;
+  color: #333;
+}
+
+/* Godot container */
+.godot-window {
+  width: 800px;
+  height: 450px;
+  margin: 18px auto 28px;
+  background: white;
+  border: 3px solid orange;
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+}
+
+/* Make iframe fill the container */
+.godot-window iframe {
+  width: 100%;
+  height: 100%;
+  border: none;
+}
+
+/* Code block styling */
+.code-block {
+  width: 100%;
+  height: 100%;
+  overflow: auto;
+  text-align: left;
+  background: transparent;
+  border: none;
+  margin: 0;
+  padding: 6px;
+  box-sizing: border-box;
+  font-family: "Courier New", Monaco, "Lucida Console", monospace;
+  font-size: 14px;
+  color: #f1f1f1;
+  line-height: 1.45;
+}
+
+/* Single visual line row containing number and text */
+.code-line {
+  display: flex;
+  white-space: pre;
+}
+
+/* left column: line number */
+.ln-number {
+  width: 36px;
+  text-align: right;
+  padding-right: 12px;
+  color: #bfbfbf;
+  user-select: none;
+}
+
+/* right column: actual code text */
+.ln-text {
+  flex: 1;
+  color: #f1f1f1;
+}
+
+/* Options list */
+.options-form {
+  width: 800px;
+  margin: 0 auto;
+  text-align: left;
+}
+
+.options-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 8px 12px;
+  background: transparent;
+}
+
+.option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 15px;
+  color: #222;
+}
+
+/* actions and feedback */
+.form-actions {
+  margin-top: 12px;
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.submit-btn {
+  padding: 8px 14px;
+  border-radius: 6px;
+  border: none;
+  cursor: pointer;
+  font-weight: 600;
+  background: #2d6cdf;
+  color: white;
+}
+
+.result {
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-size: 14px;
+}
+.result.ok { background: #e6ffed; color: #0b7b3c; border: 1px solid #88d3a0; }
+.result.bad { background: #fff1f1; color: #a81919; border: 1px solid #f1a1a1; }

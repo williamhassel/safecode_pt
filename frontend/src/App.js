@@ -7,9 +7,9 @@ import GamePage from "./GamePage";
 export default function App() {
   return (
     <Router>
-      <nav>
+      {/* <nav>
         <Link to="/">Home</Link> | <Link to="/game">Play Game</Link>
-      </nav>
+      </nav> */}
       <Routes>
         <Route path="/game" element={<GamePage />} />
       </Routes>
