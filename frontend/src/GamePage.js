@@ -56,7 +56,7 @@ export default function GamePage() {
         <a href="/">Home</a> <span> | </span> <a href="/game">Play Game</a>
       </nav>
 
-      <h1 className="title">AI Vulnerability Challenge</h1>
+      <h1 className="title">Vulnerability Challenge 1</h1>
 
       <div className="instructions">
         <strong>Vulnerability description:</strong> The server parses JSON from the client and uses a field
