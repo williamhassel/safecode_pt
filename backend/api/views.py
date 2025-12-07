@@ -6,6 +6,10 @@ from .models import Challenge, Result
 from .serializers import ChallengeSerializer, ResultSerializer
 from .utils import check_and_issue_certificate, get_user_stats
 
+from rest_framework import generics, status
+from rest_framework.response import Response
+from rest_framework.permissions import IsAuthenticated
+
 class ChallengeViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = Challenge.objects.all()
     serializer_class = ChallengeSerializer
