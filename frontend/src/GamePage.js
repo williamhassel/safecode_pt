@@ -32,7 +32,7 @@ export default function GamePage() {
   const [result, setResult] = useState(null);
 
   // in this toy example the correct choice is option 2 (string concatenation -> SQL injection)
-  const correctOptionId = "opt2";
+  const correctOptionId = "opt4";
 
   function handleSubmit(e) {
     e.preventDefault();
@@ -59,8 +59,7 @@ export default function GamePage() {
       <h1 className="title">Vulnerability Challenge 1</h1>
 
       <div className="instructions">
-        <strong>Vulnerability description:</strong> The server parses JSON from the client and uses a field
-        from that JSON directly when building a database query. Identify which lines contain the vulnerability.
+        <strong>Vulnerability description:</strong> The server parses JSON sent by the client and then directly inserts a field from that JSON into a SQL statement without validation or parameterization. This allows an attacker to inject SQL content through the userId field.
       </div>
 
       {/* <div className="godot-window" role="region" aria-label="Godot preview window">
