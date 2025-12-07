@@ -4,6 +4,7 @@ from django.shortcuts import render
 from rest_framework import viewsets, permissions
 from .models import Challenge, Result
 from .serializers import ChallengeSerializer, ResultSerializer
+from .utils import check_and_issue_certificate, get_user_stats
 
 class ChallengeViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = Challenge.objects.all()
@@ -14,3 +15,33 @@ class ResultViewSet(viewsets.ModelViewSet):
     queryset = Result.objects.all()
     serializer_class = ResultSerializer
     permission_classes = [permissions.IsAuthenticated]
+
+class ResultCreateView(generics.CreateAPIView):
+    queryset = Result.objects.all()
+    serializer_class = ResultSerializer
+    permission_classes = [IsAuthenticated]
+
+    def create(self, request, *args, **kwargs):
+        # Let DRF handle validation + saving first
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        self.perform_create(serializer)
+
+        # After saving the result: update stats and maybe issue certificate
+        user = request.user
+        certificate = check_and_issue_certificate(user, min_questions=100, threshold=0.80)
+        total, correct, accuracy = get_user_stats(user)
+
+        # Build custom response
+        response_data = {
+            "result": serializer.data,
+            "stats": {
+                "total_answered": total,
+                "correct_answers": correct,
+                "accuracy": accuracy,
+            },
+            "certificate_issued": certificate is not None,
+        }
+
+        headers = self.get_success_headers(serializer.data)
+        return Response(response_data, status=status.HTTP_201_CREATED, headers=headers)

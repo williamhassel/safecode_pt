@@ -19,6 +19,7 @@ from django.urls import path, include
 from rest_framework import routers
 from backend.api.views import ChallengeViewSet, ResultViewSet
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
+from backend.api.views import ResultCreateView
 
 router = routers.DefaultRouter()
 router.register(r'challenges', ChallengeViewSet)
@@ -29,4 +30,5 @@ urlpatterns = [
     path('api/', include(router.urls)),
     path('api/token/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
     path('api/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
+    path("results/", ResultCreateView.as_view(), name="result-create"),
 ]
