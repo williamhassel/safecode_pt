@@ -72,3 +72,24 @@ class Certificate(models.Model):
 
     def __str__(self):
         return f"Certificate for {self.user.username} @ {self.issued_at.date()}"
+    
+class GenerationRequest(models.Model):
+    STATUS_CHOICES = [
+        ("queued", "Queued"),
+        ("running", "Running"),
+        ("failed", "Failed"),
+        ("done", "Done"),
+    ]
+    created_by = models.ForeignKey(User, null=True, blank=True, on_delete=models.SET_NULL)
+    status = models.CharField(max_length=16, choices=STATUS_CHOICES, default="queued")
+    error = models.TextField(blank=True, default="")
+    logs = models.TextField(blank=True, default="")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+class GeneratedChallenge(models.Model):
+    generation = models.OneToOneField(GenerationRequest, on_delete=models.CASCADE, related_name="challenge")
+    language = models.CharField(max_length=32, default="python")
+    vuln_type = models.CharField(max_length=64, default="sqli")
+    difficulty = models.CharField(max_length=16, default="easy")
+    artifact = models.JSONField()  # full challenge JSON
+    created_at = models.DateTimeField(auto_now_add=True)
