@@ -22,32 +22,88 @@ const CODE_SNIPPET = `1  // Server receives JSON from client
 
 const OPTIONS = [
   { id: "opt1", label: "Lines 3-5", lines: [3, 4, 5] },
-  { id: "opt2", label: "Lines 6-8", lines: [6, 7, 8] }, // CORRECT in this example
+  { id: "opt2", label: "Lines 6-8", lines: [6, 7, 8] }, // CORRECT in this example?
   { id: "opt3", label: "Lines 9-11", lines: [9, 10, 11] },
   { id: "opt4", label: "Lines 12-16", lines: [12, 13, 14, 15, 16] },
 ];
 
+const API_BASE = "http://localhost:8000/api";
+const CHALLENGE_ID = 1; // TODO: replace with real challenge id from backend later
+
 export default function GamePage() {
   const [selected, setSelected] = useState("");
   const [result, setResult] = useState(null);
+  const [stats, setStats] = useState(null); // to show total/correct/accuracy from backend
 
-  // in this toy example the correct choice is option 2 (string concatenation -> SQL injection)
+  // choose which option you actually want to be correct
   const correctOptionId = "opt4";
 
-  function handleSubmit(e) {
+  async function handleSubmit(e) {
     e.preventDefault();
+
     if (!selected) {
       setResult({ ok: false, msg: "Please select an option." });
       return;
     }
-    if (selected === correctOptionId) {
-      setResult({ ok: true, msg: "Correct — those lines build a SQL query with user input!" });
+
+    const isCorrect = selected === correctOptionId;
+
+    // Local feedback first
+    if (isCorrect) {
+      setResult({
+        ok: true,
+        msg: "Correct — those lines build a SQL query with user input!",
+      });
     } else {
-      setResult({ ok: false, msg: "Not correct. Try examining how user input is used in the query." });
+      setResult({
+        ok: false,
+        msg: "Not correct. Try examining how user input is used in the query.",
+      });
+    }
+
+    // Now send result to backend (protected endpoint)
+    const accessToken = localStorage.getItem("accessToken");
+    if (!accessToken) {
+      console.warn("No access token found. User is probably not logged in.");
+      return;
+    }
+
+    try {
+      const response = await fetch(`${API_BASE}/results/`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({
+          challenge: CHALLENGE_ID,
+          is_correct: isCorrect,
+          score: isCorrect ? 1 : 0,
+        }),
+      });
+
+      if (!response.ok) {
+        const text = await response.text();
+        console.error("Failed to send result:", text);
+        return;
+      }
+
+      const data = await response.json();
+      // data = { result: {...}, stats: { total_answered, correct_answers, accuracy }, certificate_issued }
+
+      setStats(data.stats);
+
+      if (data.certificate_issued) {
+        // You can improve this UI later
+        alert(
+          "Congratulations! You have earned a certificate. You can view/download it on your profile page."
+        );
+      }
+    } catch (err) {
+      console.error("Error while sending result:", err);
     }
   }
 
-  // prepare lines with numbers for rendering
   const lines = CODE_SNIPPET.trim().split("\n").map((ln) => ln);
 
   return (
@@ -59,25 +115,13 @@ export default function GamePage() {
       <h1 className="title">Vulnerability Challenge 1</h1>
 
       <div className="instructions">
-        <strong>Vulnerability description:</strong> The server parses JSON sent by the client and then directly inserts a field from that JSON into a SQL statement without validation or parameterization. This allows an attacker to inject SQL content through the userId field.
+        <strong>Vulnerability description:</strong> The server parses JSON sent
+        by the client and then directly inserts a field from that JSON into a
+        SQL statement without validation or parameterization. This allows an
+        attacker to inject SQL content through the userId field.
       </div>
 
-      {/* <div className="godot-window" role="region" aria-label="Godot preview window">
-        <pre className="code-block" aria-hidden="false">
-          {lines.map((ln, idx) => {
-            // show line text with preserved spaces after the leading number in the sample
-            return (
-              <div key={idx} className="code-line">
-                <span className="ln-number">{ln.split(" ")[0]}</span>
-                <span className="ln-text">{ln.replace(/^\d+\s+/, "")}</span>
-              </div>
-            );
-          })}
-        </pre>
-      </div> */}
-
       {/* Godot window */}
-
       <div className="godot-window">
         <iframe
           src="/godot-build/index.html"
@@ -118,6 +162,18 @@ export default function GamePage() {
           )}
         </div>
       </form>
+
+      {stats && (
+        <div className="stats-panel">
+          <h2>Your progress</h2>
+          <p>Total answered: {stats.total_answered}</p>
+          <p>Correct answers: {stats.correct_answers}</p>
+          <p>
+            Accuracy: {(stats.accuracy * 100).toFixed(1)}
+            %
+          </p>
+        </div>
+      )}
     </div>
   );
 }

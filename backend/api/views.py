@@ -1,14 +1,51 @@
 from django.shortcuts import render
 
+# # Create your views here.
+# from rest_framework import viewsets, generics, permissions
+# from .models import Challenge, Result
+# from .serializers import ChallengeSerializer, ResultSerializer, UserSerializer, RegisterSerializer
+# from .utils import check_and_issue_certificate, get_user_stats
+
+# from rest_framework import generics, status
+# from rest_framework.response import Response
+# from rest_framework.permissions import IsAuthenticated
+
+# from django.contrib.auth.models import User
+
 # Create your views here.
-from rest_framework import viewsets, permissions
+from rest_framework import viewsets, generics, permissions
 from .models import Challenge, Result
-from .serializers import ChallengeSerializer, ResultSerializer
+from .serializers import ChallengeSerializer, ResultSerializer, UserSerializer, RegisterSerializer
 from .utils import check_and_issue_certificate, get_user_stats
 
 from rest_framework import generics, status
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
+
+from django.contrib.auth.models import User
+
+
+
+class RegisterView(generics.CreateAPIView):
+    """
+    POST /api/auth/register/
+    Body: { "username": "...", "email": "...", "password": "..." }
+    """
+    queryset = User.objects.all()
+    serializer_class = RegisterSerializer
+    permission_classes = [permissions.AllowAny]
+
+class CurrentUserView(generics.RetrieveAPIView):
+    """
+    GET /api/auth/me/
+    Returns info about the logged-in user.
+    """
+    serializer_class = UserSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_object(self):
+        return self.request.user
+
 
 class ChallengeViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = Challenge.objects.all()

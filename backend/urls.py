@@ -1,34 +1,34 @@
-"""
-URL configuration for backend project.
-
-The `urlpatterns` list routes URLs to views. For more information please see:
-    https://docs.djangoproject.com/en/5.2/topics/http/urls/
-Examples:
-Function views
-    1. Add an import:  from my_app import views
-    2. Add a URL to urlpatterns:  path('', views.home, name='home')
-Class-based views
-    1. Add an import:  from other_app.views import Home
-    2. Add a URL to urlpatterns:  path('', Home.as_view(), name='home')
-Including another URLconf
-    1. Import the include() function: from django.urls import include, path
-    2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
-"""
+# backend/urls.py
 from django.contrib import admin
 from django.urls import path, include
 from rest_framework import routers
-from backend.api.views import ChallengeViewSet, ResultViewSet
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
-from backend.api.views import ResultCreateView
+
+from backend.api.views import (
+    ChallengeViewSet,
+    ResultViewSet,      # keep only if you actually use it elsewhere
+    ResultCreateView,
+    RegisterView,
+    CurrentUserView,
+)
 
 router = routers.DefaultRouter()
 router.register(r'challenges', ChallengeViewSet)
-router.register(r'results', ResultViewSet)
+# If you ONLY use ResultCreateView, you can comment this out:
+# router.register(r'results', ResultViewSet)
 
 urlpatterns = [
     path('admin/', admin.site.urls),
+
+    # Router endpoints, e.g. /api/challenges/
     path('api/', include(router.urls)),
-    path('api/token/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
-    path('api/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
-    path("results/", ResultCreateView.as_view(), name="result-create"),
+
+    # Auth API
+    path('api/auth/register/', RegisterView.as_view(), name='auth-register'),
+    path('api/auth/login/', TokenObtainPairView.as_view(), name='auth-login'),
+    path('api/auth/refresh/', TokenRefreshView.as_view(), name='auth-refresh'),
+    path('api/auth/me/', CurrentUserView.as_view(), name='auth-me'),
+
+    # Result creation + stats + certificate
+    path('api/results/', ResultCreateView.as_view(), name='result-create'),
 ]
