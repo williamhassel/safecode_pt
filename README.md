@@ -14,21 +14,40 @@ http://localhost:8080
 
 /////
 
-Backend startup
+## Backend startup
 
-venv\Scripts\activate    
+In root:
 
-python manage.py migrate
+venv\Scripts\activate.ps1    
 
 python manage.py makemigrations
 
+python manage.py migrate
+
 python manage.py runserver
 
+/////
 
-////
+## Message broker: Redis
 
-Frontend startup
+In new terminal:
+docker run -p 6379:6379 redis
+
+/////
+
+## Background worker: Celery
+
+In new terminal:
+celery -A backend worker -l info -P solo
+
+/////
+
+## Frontend startup
 
 cd frontend
+
+(First time only:)
+npm install
+
 
 npm start
