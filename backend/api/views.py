@@ -5,7 +5,7 @@ from rest_framework.views import APIView
 from django.shortcuts import get_object_or_404
 from django.contrib.auth.models import User
 
-from .models import Challenge, Result, GenerationRequest, GeneratedChallenge
+from .models import Challenge, Result, Certificate, GenerationRequest, GeneratedChallenge
 from .serializers import ChallengeSerializer, ResultSerializer, UserSerializer, RegisterSerializer
 from .utils import check_and_issue_certificate, get_user_stats
 from .tasks import generate_challenge
@@ -23,6 +23,24 @@ class CurrentUserView(generics.RetrieveAPIView):
 
     def get_object(self):
         return self.request.user
+
+
+class UserStatsView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        user = request.user
+        total, correct, accuracy = get_user_stats(user)
+
+        # Check if user has earned certificate (8/10 requirement)
+        has_certificate = Certificate.objects.filter(user=user).exists()
+
+        return Response({
+            "total_answered": total,
+            "correct_answers": correct,
+            "accuracy": accuracy,
+            "has_certificate": has_certificate,
+        })
 
 
 class ChallengeViewSet(viewsets.ReadOnlyModelViewSet):
@@ -48,7 +66,7 @@ class ResultCreateView(generics.CreateAPIView):
         self.perform_create(serializer)
 
         user = request.user
-        certificate = check_and_issue_certificate(user, min_questions=100, threshold=0.80)
+        certificate = check_and_issue_certificate(user, min_questions=10, threshold=0.80)
         total, correct, accuracy = get_user_stats(user)
 
         response_data = {

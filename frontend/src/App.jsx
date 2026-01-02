@@ -1,7 +1,9 @@
 // src/App.jsx
 import { useState } from "react";
+import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
 import AuthPage from "./pages/AuthPage";
-import GamePage from "./pages/GamePage"; // your existing page with Godot iframe etc.
+import HomePage from "./pages/HomePage";
+import GamePage from "./pages/GamePage";
 
 function App() {
   const [authenticated, setAuthenticated] = useState(
@@ -16,7 +18,15 @@ function App() {
     return <AuthPage onAuthenticated={handleAuthenticated} />;
   }
 
-  return <GamePage />;
+  return (
+    <Router>
+      <Routes>
+        <Route path="/" element={<HomePage />} />
+        <Route path="/game" element={<GamePage />} />
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </Router>
+  );
 }
 
 export default App;

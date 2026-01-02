@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import "./GamePage.css";
 
 import { postWithAuth } from "../api/client";
@@ -33,6 +34,7 @@ const API_BASE = "http://localhost:8000/api";
 const CHALLENGE_ID = 1; // TODO: replace with real challenge id from backend later
 
 export default function GamePage() {
+  const navigate = useNavigate();
   const [selected, setSelected] = useState("");
   const [result, setResult] = useState(null);
   const [stats, setStats] = useState(null); // to show total/correct/accuracy from backend
@@ -104,10 +106,16 @@ export default function GamePage() {
     window.location.reload(); // Reload to trigger auth check
   };
 
+  const handleHomeClick = (e) => {
+    e.preventDefault();
+    navigate("/");
+  };
+
   return (
     <div className="page-root">
       <nav className="top-links">
-        <a href="/">Home</a> <span> | </span> <a href="/game">Play Game</a>
+        <a href="/" onClick={handleHomeClick}>Home</a> <span> | </span>
+        <span style={{ color: '#888' }}>Play Game</span>
         <span> | </span>
         <button
           onClick={handleLogout}

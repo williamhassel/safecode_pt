@@ -10,6 +10,7 @@ from backend.api.views import (
     ResultCreateView,
     RegisterView,
     CurrentUserView,
+    UserStatsView,
     GeneratorGenerateView,
     GeneratorStatusView,
     GeneratorChallengeView,
@@ -31,6 +32,7 @@ urlpatterns = [
     path('api/auth/login/', TokenObtainPairView.as_view(), name='auth-login'),
     path('api/auth/refresh/', TokenRefreshView.as_view(), name='auth-refresh'),
     path('api/auth/me/', CurrentUserView.as_view(), name='auth-me'),
+    path('api/stats/', UserStatsView.as_view(), name='user-stats'),
 
     # Result creation + stats + certificate
     path('api/results/', ResultCreateView.as_view(), name='result-create'),
