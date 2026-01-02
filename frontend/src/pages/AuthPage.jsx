@@ -200,6 +200,7 @@ export default function AuthPage({ onAuthenticated }) {
                 background: "#f8f9fa",
                 color: "#333",
                 fontSize: "0.9rem",
+                boxSizing: "border-box",
               }}
             />
           </div>
@@ -230,6 +231,7 @@ export default function AuthPage({ onAuthenticated }) {
                   background: "#f8f9fa",
                   color: "#333",
                   fontSize: "0.9rem",
+                  boxSizing: "border-box",
                 }}
               />
             </div>
@@ -262,6 +264,7 @@ export default function AuthPage({ onAuthenticated }) {
                 background: "#f8f9fa",
                 color: "#333",
                 fontSize: "0.9rem",
+                boxSizing: "border-box",
               }}
             />
             <p
