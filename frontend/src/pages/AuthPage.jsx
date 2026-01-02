@@ -93,8 +93,8 @@ export default function AuthPage({ onAuthenticated }) {
         display: "flex",
         justifyContent: "center",
         alignItems: "center",
-        background: "#0f172a",
-        color: "#e5e7eb",
+        background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
+        color: "#ffffff",
         fontFamily: "system-ui, -apple-system, BlinkMacSystemFont, sans-serif",
       }}
     >
@@ -104,16 +104,16 @@ export default function AuthPage({ onAuthenticated }) {
           maxWidth: 420,
           padding: "2.5rem",
           borderRadius: "1.5rem",
-          background: "#020617",
-          boxShadow: "0 24px 70px rgba(0,0,0,0.6)",
-          border: "1px solid rgba(148,163,184,0.3)",
+          background: "white",
+          boxShadow: "0 24px 70px rgba(0,0,0,0.3)",
+          border: "none",
         }}
       >
         <div style={{ marginBottom: "1.5rem", textAlign: "center" }}>
-          <h1 style={{ fontSize: "1.8rem", margin: 0, fontWeight: 700 }}>
+          <h1 style={{ fontSize: "1.8rem", margin: 0, fontWeight: 700, color: "#667eea" }}>
             SafeCode
           </h1>
-          <p style={{ marginTop: "0.5rem", color: "#9ca3af", fontSize: "0.9rem" }}>
+          <p style={{ marginTop: "0.5rem", color: "#666", fontSize: "0.9rem" }}>
             Log in or create an account to track your secure coding progress
             and certificates.
           </p>
@@ -123,10 +123,10 @@ export default function AuthPage({ onAuthenticated }) {
         <div
           style={{
             display: "flex",
-            background: "#020617",
+            background: "#f8f9fa",
             borderRadius: "999px",
             padding: "0.25rem",
-            border: "1px solid #1f2933",
+            border: "1px solid #e9ecef",
             marginBottom: "1.5rem",
           }}
         >
@@ -144,8 +144,8 @@ export default function AuthPage({ onAuthenticated }) {
               cursor: "pointer",
               fontSize: "0.9rem",
               fontWeight: 500,
-              background: mode === "login" ? "#2563eb" : "transparent",
-              color: mode === "login" ? "#f9fafb" : "#9ca3af",
+              background: mode === "login" ? "linear-gradient(135deg, #667eea 0%, #764ba2 100%)" : "transparent",
+              color: mode === "login" ? "#ffffff" : "#666",
               transition: "all 0.15s ease-out",
             }}
           >
@@ -165,8 +165,8 @@ export default function AuthPage({ onAuthenticated }) {
               cursor: "pointer",
               fontSize: "0.9rem",
               fontWeight: 500,
-              background: mode === "register" ? "#2563eb" : "transparent",
-              color: mode === "register" ? "#f9fafb" : "#9ca3af",
+              background: mode === "register" ? "linear-gradient(135deg, #667eea 0%, #764ba2 100%)" : "transparent",
+              color: mode === "register" ? "#ffffff" : "#666",
               transition: "all 0.15s ease-out",
             }}
           >
@@ -182,7 +182,8 @@ export default function AuthPage({ onAuthenticated }) {
                 display: "block",
                 marginBottom: "0.25rem",
                 fontSize: "0.8rem",
-                color: "#e5e7eb",
+                color: "#333",
+                fontWeight: 500,
               }}
             >
               Username
@@ -195,9 +196,9 @@ export default function AuthPage({ onAuthenticated }) {
                 width: "100%",
                 padding: "0.55rem 0.7rem",
                 borderRadius: "0.75rem",
-                border: "1px solid #1f2933",
-                background: "#020617",
-                color: "#e5e7eb",
+                border: "1px solid #e9ecef",
+                background: "#f8f9fa",
+                color: "#333",
                 fontSize: "0.9rem",
               }}
             />
@@ -211,7 +212,8 @@ export default function AuthPage({ onAuthenticated }) {
                   display: "block",
                   marginBottom: "0.25rem",
                   fontSize: "0.8rem",
-                  color: "#e5e7eb",
+                  color: "#333",
+                  fontWeight: 500,
                 }}
               >
                 Email (optional)
@@ -224,9 +226,9 @@ export default function AuthPage({ onAuthenticated }) {
                   width: "100%",
                   padding: "0.55rem 0.7rem",
                   borderRadius: "0.75rem",
-                  border: "1px solid #1f2933",
-                  background: "#020617",
-                  color: "#e5e7eb",
+                  border: "1px solid #e9ecef",
+                  background: "#f8f9fa",
+                  color: "#333",
                   fontSize: "0.9rem",
                 }}
               />
@@ -240,7 +242,8 @@ export default function AuthPage({ onAuthenticated }) {
                 display: "block",
                 marginBottom: "0.25rem",
                 fontSize: "0.8rem",
-                color: "#e5e7eb",
+                color: "#333",
+                fontWeight: 500,
               }}
             >
               Password
@@ -255,9 +258,9 @@ export default function AuthPage({ onAuthenticated }) {
                 width: "100%",
                 padding: "0.55rem 0.7rem",
                 borderRadius: "0.75rem",
-                border: "1px solid #1f2933",
-                background: "#020617",
-                color: "#e5e7eb",
+                border: "1px solid #e9ecef",
+                background: "#f8f9fa",
+                color: "#333",
                 fontSize: "0.9rem",
               }}
             />
@@ -265,7 +268,7 @@ export default function AuthPage({ onAuthenticated }) {
               style={{
                 marginTop: "0.25rem",
                 fontSize: "0.75rem",
-                color: "#6b7280",
+                color: "#666",
               }}
             >
               Minimum 8 characters. Use a strong password if this is used in
@@ -280,9 +283,10 @@ export default function AuthPage({ onAuthenticated }) {
                 marginBottom: "0.9rem",
                 padding: "0.6rem 0.75rem",
                 borderRadius: "0.75rem",
-                background: "rgba(248,113,113,0.12)",
-                color: "#fecaca",
+                background: "#f8d7da",
+                color: "#721c24",
                 fontSize: "0.8rem",
+                border: "1px solid #f5c6cb",
               }}
             >
               {error}
@@ -298,11 +302,23 @@ export default function AuthPage({ onAuthenticated }) {
               borderRadius: "0.9rem",
               border: "none",
               cursor: loading ? "default" : "pointer",
-              background: loading ? "#1d4ed8" : "#2563eb",
-              color: "#f9fafb",
+              background: loading ? "linear-gradient(135deg, #5568d3 0%, #63408b 100%)" : "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
+              color: "#ffffff",
               fontWeight: 600,
               fontSize: "0.95rem",
               marginTop: "0.3rem",
+              boxShadow: "0 4px 15px rgba(102, 126, 234, 0.4)",
+              transition: "all 0.3s ease",
+            }}
+            onMouseEnter={(e) => {
+              if (!loading) {
+                e.target.style.transform = "translateY(-2px)";
+                e.target.style.boxShadow = "0 6px 20px rgba(102, 126, 234, 0.5)";
+              }
+            }}
+            onMouseLeave={(e) => {
+              e.target.style.transform = "translateY(0)";
+              e.target.style.boxShadow = "0 4px 15px rgba(102, 126, 234, 0.4)";
             }}
           >
             {loading
@@ -317,7 +333,7 @@ export default function AuthPage({ onAuthenticated }) {
           style={{
             marginTop: "1rem",
             fontSize: "0.75rem",
-            color: "#6b7280",
+            color: "#666",
             textAlign: "center",
           }}
         >
