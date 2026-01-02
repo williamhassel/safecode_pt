@@ -1,43 +1,11 @@
+# backend/app/tasks.py
 from celery import shared_task
+from django.db import transaction
 from .models import GenerationRequest, GeneratedChallenge
 from .docker_runner import run_in_container
+from .llm_generator import generate_bundle_sqli_easy
 
-def make_mvp_secure_bundle():
-    # Hardcoded MVP example. Replace this with LLM generation once the loop works.
-    secure_code = """\
-import sqlite3
-
-def get_user(conn, username: str):
-    cur = conn.cursor()
-    cur.execute("SELECT id, username FROM users WHERE username = ?", (username,))
-    return cur.fetchall()
-"""
-    tests = """\
-import sqlite3
-from snippet import get_user
-
-def test_get_user_param_query_not_bypass():
-    conn = sqlite3.connect(":memory:")
-    cur = conn.cursor()
-    cur.execute("CREATE TABLE users (id INTEGER PRIMARY KEY, username TEXT)")
-    cur.execute("INSERT INTO users(username) VALUES ('alice'), ('bob')")
-    conn.commit()
-
-    # normal
-    assert get_user(conn, "alice") == [(1, "alice")]
-
-    # injection attempt should not return both rows
-    rows = get_user(conn, "' OR 1=1 --")
-    assert rows == []
-"""
-    return secure_code, tests
-
-def mutate_to_insecure(secure_code: str) -> str:
-    # Minimal “injection”: unsafe string formatting
-    return secure_code.replace(
-        'cur.execute("SELECT id, username FROM users WHERE username = ?", (username,))',
-        'cur.execute(f"SELECT id, username FROM users WHERE username = \'{username}\'")'
-    )
+MAX_LLM_ATTEMPTS = 3
 
 @shared_task
 def generate_challenge(generation_id: int):
@@ -46,55 +14,63 @@ def generate_challenge(generation_id: int):
     gr.save(update_fields=["status"])
 
     try:
-        secure_code, tests = make_mvp_secure_bundle()
+        last_err = None
 
-        secure_results = run_in_container({"code": secure_code, "tests": tests})
+        for attempt in range(1, MAX_LLM_ATTEMPTS + 1):
+            bundle = generate_bundle_sqli_easy(seed_topic="username lookup")
 
-        insecure_code = mutate_to_insecure(secure_code)
-        insecure_results = run_in_container({"code": insecure_code, "tests": tests})
+            secure_code = bundle["secure_code"]
+            insecure_code = bundle["insecure_code"]
+            tests = bundle["tests"]
+            vuln_lines = bundle["vulnerable_lines"]
 
-        # Compute vulnerable line(s) deterministically (MVP heuristic)
-        vuln_lines = []
-        for i, line in enumerate(insecure_code.splitlines(), start=1):
-            if "cur.execute(f" in line:
-                vuln_lines.append(i)
+            secure_results = run_in_container({"code": secure_code, "tests": tests})
+            insecure_results = run_in_container({"code": insecure_code, "tests": tests})
 
-        options = [
-            {"lines": vuln_lines, "label": "Unsafe query construction allows SQL injection."},
-            {"lines": [max(1, vuln_lines[0]-1)], "label": "Input handling line (distractor)."},
-            {"lines": [min(len(insecure_code.splitlines()), vuln_lines[0]+1)], "label": "Return line (distractor)."},
-            {"lines": [1], "label": "Import line (distractor)."},
-        ]
+            secure_ok = bool(secure_results.get("ok", False))
+            insecure_ok = bool(insecure_results.get("ok", False))
 
-        artifact = {
-            "language": "python",
-            "vuln_type": "sqli",
-            "difficulty": "easy",
-            "secure_code": secure_code,
-            "insecure_code": insecure_code,
-            "vulnerable_lines": vuln_lines,
-            "options": options,
-            "tests": tests,
-            "verification": {
-                "secure": secure_results,
-                "insecure": insecure_results,
-            },
-            "explanation": {
-                "short": "The insecure version builds SQL by concatenating user input.",
-                "fix": "Use parameterized queries with placeholders."
+            # Your acceptance criteria:
+            # secure must pass, insecure must fail
+            if secure_ok and (not insecure_ok):
+                artifact = {
+                    **bundle,
+                    "options": [
+                        {"lines": vuln_lines, "label": "Unsafe query construction allows SQL injection."},
+                        {"lines": [max(1, vuln_lines[0] - 1)], "label": "Input-handling line (distractor)."},
+                        {"lines": [min(len(insecure_code.splitlines()), vuln_lines[0] + 1)], "label": "Return/flow line (distractor)."},
+                        {"lines": [1], "label": "Import line (distractor)."},
+                    ],
+                    "verification": {
+                        "secure": secure_results,
+                        "insecure": insecure_results,
+                        "attempt": attempt,
+                    },
+                }
+
+                with transaction.atomic():
+                    GeneratedChallenge.objects.create(
+                        generation=gr,
+                        language=bundle["language"],
+                        vuln_type=bundle["vuln_type"],
+                        difficulty=bundle["difficulty"],
+                        artifact=artifact,
+                    )
+                    gr.status = "done"
+                    gr.save(update_fields=["status"])
+
+                return  # success
+
+            last_err = {
+                "attempt": attempt,
+                "secure_ok": secure_ok,
+                "insecure_ok": insecure_ok,
+                "secure_results": secure_results,
+                "insecure_results": insecure_results,
             }
-        }
 
-        GeneratedChallenge.objects.create(
-            generation=gr,
-            language="python",
-            vuln_type="sqli",
-            difficulty="easy",
-            artifact=artifact,
-        )
-
-        gr.status = "done"
-        gr.save(update_fields=["status"])
+        # If we get here, all attempts failed acceptance criteria
+        raise RuntimeError(f"LLM bundle failed verification after {MAX_LLM_ATTEMPTS} attempts: {last_err}")
 
     except Exception as e:
         gr.status = "failed"

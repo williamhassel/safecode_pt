@@ -1,7 +1,7 @@
 // src/App.jsx
 import { useState } from "react";
-import AuthPage from "./AuthPage";
-import GamePage from "./GamePage"; // your existing page with Godot iframe etc.
+import AuthPage from "./pages/AuthPage";
+import GamePage from "./pages/GamePage"; // your existing page with Godot iframe etc.
 
 function App() {
   const [authenticated, setAuthenticated] = useState(

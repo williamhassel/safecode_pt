@@ -1,3 +1,9 @@
 from django.contrib import admin
+from .models import Challenge, Result
+from .models import GenerationRequest, GeneratedChallenge
 
-# Register your models here.
+admin.site.register(GenerationRequest)
+admin.site.register(GeneratedChallenge)
+
+admin.site.register(Challenge)
+admin.site.register(Result)
