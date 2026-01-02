@@ -114,15 +114,16 @@ export default function GamePage() {
   return (
     <div className="page-root">
       <nav className="top-links">
-        <a href="/" onClick={handleHomeClick}>Home</a> <span> | </span>
-        <span style={{ color: '#888' }}>Play Game</span>
-        <span> | </span>
+        <a href="/" onClick={handleHomeClick}>Home</a>
+        <span className="separator"> | </span>
+        <span>Play Game</span>
+        <span className="separator"> | </span>
         <button
           onClick={handleLogout}
           style={{
             background: 'none',
             border: 'none',
-            color: 'inherit',
+            color: 'white',
             cursor: 'pointer',
             textDecoration: 'underline',
             font: 'inherit',
