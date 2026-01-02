@@ -98,10 +98,31 @@ export default function GamePage() {
 
   const lines = CODE_SNIPPET.trim().split("\n").map((ln) => ln);
 
+  const handleLogout = () => {
+    localStorage.removeItem("accessToken");
+    localStorage.removeItem("refreshToken");
+    window.location.reload(); // Reload to trigger auth check
+  };
+
   return (
     <div className="page-root">
       <nav className="top-links">
         <a href="/">Home</a> <span> | </span> <a href="/game">Play Game</a>
+        <span> | </span>
+        <button
+          onClick={handleLogout}
+          style={{
+            background: 'none',
+            border: 'none',
+            color: 'inherit',
+            cursor: 'pointer',
+            textDecoration: 'underline',
+            font: 'inherit',
+            padding: 0
+          }}
+        >
+          Logout
+        </button>
       </nav>
 
       <h1 className="title">Vulnerability Challenge 1</h1>
