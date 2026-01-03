@@ -30,7 +30,7 @@ class ChallengeSerializer(serializers.ModelSerializer):
 class ResultSerializer(serializers.ModelSerializer):
     class Meta:
         model = Result
-        fields = ["id", "challenge", "is_correct", "score", "created_at"]
+        fields = ["id", "challenge", "generated_challenge", "is_correct", "score", "created_at"]
         read_only_fields = ["id", "created_at"]
 
     def create(self, validated_data):

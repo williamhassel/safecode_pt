@@ -24,7 +24,8 @@ class Challenge(models.Model):
 
 class Result(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE)
-    challenge = models.ForeignKey(Challenge, on_delete=models.CASCADE)
+    challenge = models.ForeignKey(Challenge, on_delete=models.CASCADE, null=True, blank=True)
+    generated_challenge = models.ForeignKey('GeneratedChallenge', on_delete=models.CASCADE, null=True, blank=True)
 
     is_correct = models.BooleanField(default=False)
 
@@ -32,7 +33,11 @@ class Result(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
-        return f"{self.user.username} - {self.challenge.title}: {self.score}"
+        if self.challenge:
+            return f"{self.user.username} - {self.challenge.title}: {self.score}"
+        elif self.generated_challenge:
+            return f"{self.user.username} - Generated Challenge #{self.generated_challenge.id}: {self.score}"
+        return f"{self.user.username}: {self.score}"
 
     # Optional: if you only want one result per user/challenge (e.g. best attempt)
     # remove this if you want to allow multiple attempts!
