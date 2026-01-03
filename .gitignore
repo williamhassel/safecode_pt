@@ -17,3 +17,5 @@ frontend/build/
 safecode/.godot/
 safecode/.import/
 safecode/export/
+*.env
+nul
