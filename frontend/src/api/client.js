@@ -60,3 +60,38 @@ export async function postWithAuth(endpoint, body) {
 
   return res;
 }
+
+export async function getWithAuth(endpoint) {
+  let accessToken = localStorage.getItem("accessToken");
+  if (!accessToken) throw new Error("Not authenticated (no access token).");
+
+  // First attempt
+  let res = await fetch(`${API_BASE}${endpoint}`, {
+    method: "GET",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${accessToken}`,
+    },
+  });
+
+  // If access token expired, refresh and retry once
+  if (res.status === 401) {
+    const text = await res.text();
+
+    if (text.includes("token_not_valid") || text.includes("Token is expired")) {
+      accessToken = await refreshAccessToken();
+
+      res = await fetch(`${API_BASE}${endpoint}`, {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${accessToken}`,
+        },
+      });
+    } else {
+      throw new Error(text);
+    }
+  }
+
+  return res;
+}

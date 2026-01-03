@@ -108,4 +108,16 @@ class GeneratorChallengeView(APIView):
 
     def get(self, request, challenge_id: int):
         ch = get_object_or_404(GeneratedChallenge, id=challenge_id)
-        return Response(ch.artifact)
+        return Response({"id": ch.id, **ch.artifact})
+
+
+class LatestChallengeView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        """Fetch the most recently generated challenge"""
+        ch = GeneratedChallenge.objects.order_by('-id').first()
+        if not ch:
+            return Response({"error": "No challenges available"}, status=404)
+        # Include the ID along with the artifact data
+        return Response({"id": ch.id, **ch.artifact})

@@ -1,8 +1,6 @@
 import React, { useState, useEffect } from "react";
-import { postWithAuth } from "../api/client";
+import { getWithAuth } from "../api/client";
 import "./HomePage.css";
-
-const API_BASE = "http://localhost:8000/api";
 
 export default function HomePage() {
   const [stats, setStats] = useState(null);
@@ -15,19 +13,7 @@ export default function HomePage() {
 
   const fetchStats = async () => {
     try {
-      const accessToken = localStorage.getItem("accessToken");
-      if (!accessToken) {
-        setError("Not authenticated");
-        setLoading(false);
-        return;
-      }
-
-      const response = await fetch(`${API_BASE}/stats/`, {
-        method: "GET",
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-        },
-      });
+      const response = await getWithAuth("/stats/");
 
       if (!response.ok) {
         throw new Error("Failed to fetch stats");

@@ -14,6 +14,7 @@ from backend.api.views import (
     GeneratorGenerateView,
     GeneratorStatusView,
     GeneratorChallengeView,
+    LatestChallengeView,
 )
 
 router = routers.DefaultRouter()
@@ -40,4 +41,5 @@ urlpatterns = [
     path('api/generator/generate/', GeneratorGenerateView.as_view(), name='generator-generate'),
     path('api/generator/generation/<int:generation_id>/', GeneratorStatusView.as_view(), name='generator-status'),
     path('api/generator/challenge/<int:challenge_id>/', GeneratorChallengeView.as_view(), name='generator-challenge'),
+    path('api/generator/latest/', LatestChallengeView.as_view(), name='latest-challenge'),
 ]
