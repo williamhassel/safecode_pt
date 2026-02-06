@@ -9,19 +9,18 @@ from .llm_generator import generate_challenge_bundle
 MAX_LLM_ATTEMPTS = 5
 
 # OWASP Top 10 vulnerability types to generate
-# Start with types that work well with our testing pattern
+# All 10 types enabled for testing and verification
 VULNERABILITY_TYPES = [
     "sqli",           # SQL Injection - Works perfectly, self-contained with sqlite3
-    "xss",            # Cross-Site Scripting - Should work well with html.escape()
-    # Commented out - need refinement:
-    # "path_traversal", # Path Traversal - Now focuses on path validation, should work
-    # "cmdi",           # Command Injection - Needs mocking or built-in commands only
-    # "xxe",            # XML External Entity
-    # "insecure_deser", # Insecure Deserialization
-    # "ssrf",           # Server-Side Request Forgery
-    # "weak_crypto",    # Weak Cryptography
-    # "hardcoded_creds",# Hard-coded Credentials
-    # "auth_bypass",    # Authentication Bypass
+    "xss",            # Cross-Site Scripting - Works well with html.escape()
+    "path_traversal", # Path Traversal - Focuses on path validation
+    "cmdi",           # Command Injection - Uses mocking or built-in commands only
+    "xxe",            # XML External Entity - XML parsing vulnerabilities
+    "insecure_deser", # Insecure Deserialization - Pickle/YAML deserialization
+    "ssrf",           # Server-Side Request Forgery - URL validation issues
+    "weak_crypto",    # Weak Cryptography - Weak algorithms and hashing
+    "hardcoded_creds",# Hard-coded Credentials - Credentials in source code
+    "auth_bypass",    # Authentication Bypass - Broken authentication logic
 ]
 
 # Seed topics mapped to vulnerability types

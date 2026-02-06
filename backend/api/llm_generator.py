@@ -149,12 +149,13 @@ XSS (Cross-Site Scripting) constraints:
 - Function should return HTML string, NOT render templates
 - DO NOT import Flask, Django, or any web frameworks - use ONLY: import html
 - CRITICAL: Both versions must define the SAME function name (e.g., 'render_comment')
-- MANDATORY: Code MUST be 20-35 lines total. This is STRICTLY ENFORCED.
-  * Include: imports (2-4 lines), docstrings (2-3 lines), function definition with multiple parameters
-  * Add helper logic: timestamp formatting, default parameter handling, data validation
-  * Include realistic HTML structure with multiple nested elements (header, body, footer, metadata)
-  * Add CSS classes, data attributes, multiple user-provided fields
-  * DO NOT create minimal functions - they will be REJECTED
+- MANDATORY: BOTH secure_code AND insecure_code MUST be 20-35 lines. Count carefully!
+  * Start with: module docstring (3 lines), blank line, imports (2-3 lines), blank line
+  * Function def with docstring (1 + 5-7 lines for docstring including Args/Returns)
+  * Function body (8-12 lines of actual logic)
+  * Make BOTH versions nearly identical in structure - ONLY difference is html.escape() presence
+  * If one version is 22 lines, the other should also be ~22 lines (not 17!)
+  * Add extra validation checks, comments, or expanded HTML if needed to reach 20 lines
 - Test should verify malicious input like '<script>alert(1)</script>' is escaped (secure) vs rendered as-is (insecure)
 - Example pattern:
   ```python
@@ -219,105 +220,93 @@ XSS (Cross-Site Scripting) constraints:
 """,
     "path_traversal": """
 PATH TRAVERSAL constraints:
-- Context: File path validation (NOT actual file operations)
-- secure_code MUST validate/sanitize paths (use os.path.basename(), check against whitelist, reject '..')
-- insecure_code MUST accept paths with '../' sequences without validation
-- Function should return a sanitized/validated path (str) or None if invalid
-- DO NOT actually open/read files - just validate the path
-- Test should verify:
-  * Normal filename like 'document.txt' returns sanitized path (both versions)
-  * Path with '../../../etc/passwd' returns None (secure) or the unsafe path (insecure)
-- Example pattern:
-  ```python
-  def validate_file_path(filename):
-      # Secure: reject paths with '..'
-      if '..' in filename:
-          return None
-      return filename
-
-  # Test
-  def test_path_validation():
-      assert validate_file_path('document.txt') == 'document.txt'
-      assert validate_file_path('../../../etc/passwd') is None  # secure behavior
-  ```
+- Context: File path validation function (VALIDATION ONLY - NO actual file I/O)
+- secure_code MUST validate/sanitize paths: reject '..', use os.path.basename(), validate against whitelist
+- insecure_code MUST directly accept user paths without validation (allows '../' sequences)
+- Function should return sanitized path string or None if invalid
+- CRITICAL: DO NOT open/read/write files - ONLY validate the path string
+- Both secure and insecure MUST define the SAME function name
+- To reach 20 lines: add module docstring, imports (os, pathlib), function docstring with Args/Returns, multiple validation checks, error handling
+- Test MUST import from 'snippet' and verify:
+  * Normal filename like 'report.pdf' returns valid path (both versions)
+  * Path with '../../etc/passwd' returns None (secure) or unsafe path (insecure, test fails)
 """,
     "cmdi": """
 COMMAND INJECTION constraints:
-- Context: Subprocess execution, shell commands, system calls
-- secure_code MUST use shell=False with list arguments or input validation/escaping (using shlex.quote())
-- insecure_code MUST pass unsanitized user input to shell commands with shell=True
-- CRITICAL: Use ONLY built-in Unix commands that exist in containers: echo, ls, cat, pwd, date, whoami
-- DO NOT use: ffmpeg, convert, imagemagick, or any external tools
-- Test should use mock/patch to avoid actually executing commands
-- Example test pattern:
-  ```python
-  from unittest.mock import patch, MagicMock
-
-  @patch('subprocess.run')
-  def test_command_injection(mock_run):
-      mock_run.return_value = MagicMock(returncode=0, stdout='output')
-
-      # Normal input should work
-      result = function('safe.txt')
-      assert result is not None
-
-      # Malicious input with command injection attempt
-      # Secure: should call with shell=False or sanitized input
-      # Insecure: should call with shell=True and unsanitized input
-      result = function('file; rm -rf /')
-
-      # Check if shell=True was used (insecure behavior)
-      calls = mock_run.call_args_list
-      # Secure version: should use shell=False
-      # Insecure version: should use shell=True (test will fail detecting this)
-      assert all(not call.kwargs.get('shell', False) for call in calls)
-  ```
+- Context: System command execution using subprocess module
+- secure_code MUST use shell=False with list arguments: ['ls', '-l', user_input]
+- insecure_code MUST use shell=True with string formatting: f"ls -l {user_input}"
+- CRITICAL: Use ONLY built-in Unix commands: echo, ls, cat, pwd, date, whoami (NO ffmpeg, convert, imagemagick!)
+- Both secure and insecure MUST define the SAME function name
+- To reach 20 lines: module docstring, imports (subprocess, typing, shlex), function docstring with Args/Returns, try/except blocks, multiple validation steps
+- Tests MUST use unittest.mock.patch to mock subprocess.run - NEVER execute real commands
+- Test must verify secure uses shell=False and insecure uses shell=True
+- Test pattern: import patch and MagicMock from unittest.mock, patch subprocess.run, check kwargs in call_args_list
 """,
     "xxe": """
 XXE (XML External Entity) constraints:
-- Context: XML parsing
-- secure_code MUST disable external entity processing (defusedxml or parser features)
-- insecure_code MUST use unsafe XML parser that processes external entities
-- Test should verify malicious XML with external entities is rejected (secure) vs processed (insecure)
+- Context: XML parsing with xml.etree.ElementTree (built-in)
+- secure_code MUST disable external entities: parser.entity = {}, parser.resolve_entities = False
+- insecure_code MUST use default parser (processes external entities)
+- DO NOT use defusedxml (not installed) - use xml.etree.ElementTree
+- Both versions MUST define SAME function name
+- To reach 20 lines: module docstring, imports, function docstring, try/except, parse logic, result processing
+- Test provides malicious XML with <!ENTITY> declaration, verifies secure blocks it
 """,
     "insecure_deser": """
 INSECURE DESERIALIZATION constraints:
-- Context: Pickle, YAML, or other deserialization
-- secure_code MUST use safe alternatives (json.loads()) or validate before deserializing
-- insecure_code MUST use pickle.loads() or yaml.load() on untrusted data
-- Test should verify malicious payload fails to execute code (secure) vs executes (insecure)
+- Context: Data deserialization
+- secure_code MUST use json.loads() for safe deserialization
+- insecure_code MUST use pickle.loads() on untrusted data (vulnerable)
+- Both versions MUST define SAME function name
+- To reach 20 lines: module docstring, imports (json, pickle, base64), docstring, error handling, data validation
+- Test provides base64-encoded serialized data, verifies secure uses JSON and insecure uses pickle
+- Test should check that secure version rejects pickle data or only accepts JSON format
 """,
     "ssrf": """
 SSRF (Server-Side Request Forgery) constraints:
-- Context: Making HTTP requests based on user input
-- secure_code MUST validate URLs against whitelist, block internal IPs
-- insecure_code MUST directly use user-supplied URLs
-- Test should verify requests to internal IPs like '127.0.0.1' are blocked (secure) vs allowed (insecure)
+- Context: URL validation for HTTP requests (validation only, DO NOT make actual requests)
+- secure_code MUST validate URLs: check against whitelist, block internal IPs (127.0.0.1, 192.168.x.x, 10.x.x.x, localhost)
+- insecure_code MUST directly accept user URLs without validation
+- Both versions MUST define SAME function name, return validated URL or None
+- MANDATORY: BOTH versions MUST be 20-35 lines. Do NOT exceed 35 lines!
+  * Target 25-30 lines for both versions to stay safely within limits
+  * Start with: module docstring (2-3 lines), blank line, imports (2 lines), blank line
+  * Function def with docstring (1 + 4-6 lines for concise docstring)
+  * Function body with try/except, URL parsing, basic validation (8-12 lines)
+  * The ONLY difference: secure validates IPs, insecure skips this check
+  * Keep code concise - if approaching 35 lines, remove extra comments or blank lines
+- Test verifies internal IPs are blocked (secure returns None, insecure returns URL, test fails)
 """,
     "weak_crypto": """
 WEAK CRYPTOGRAPHY constraints:
-- Context: Password hashing, encryption, token generation
-- secure_code MUST use strong algorithms (bcrypt, scrypt, secrets module, Fernet)
-- insecure_code MUST use weak algorithms (MD5, SHA1 for passwords, weak random)
-- Test should verify strong crypto is used (secure) vs weak/predictable (insecure)
+- Context: Password hashing or token generation
+- secure_code MUST use hashlib.sha256 WITH salt (using secrets module) OR secrets.token_hex() for tokens
+- insecure_code MUST use hashlib.md5 without salt OR random.random()/random.randint() for tokens
+- DO NOT use bcrypt/scrypt (not installed) - use built-in hashlib and secrets modules
+- Both versions MUST define SAME function name
+- To reach 20 lines: module docstring, imports, helper functions, docstrings
+- Test verifies salt is used (secure returns non-empty salt, insecure returns empty) OR token entropy
 """,
     "hardcoded_creds": """
 HARDCODED CREDENTIALS constraints:
-- Context: Authentication, API keys, database connections
-- secure_code MUST use environment variables or secure config management
-- insecure_code MUST have credentials hardcoded in source
-- Test should verify credentials aren't in source (secure) vs hardcoded (insecure)
+- Context: Database connection or API client initialization
+- secure_code MUST use os.getenv() or os.environ.get() to read credentials from environment
+- insecure_code MUST have hardcoded credentials as string literals in source code
+- Both versions MUST define SAME function name
+- To reach 20 lines: module docstring, imports (os, typing), docstring, connection logic, error handling
+- Test verifies function works but should inspect that secure version doesn't contain literal password strings
+- Tricky: both versions must be functionally similar, difference is WHERE credentials come from
 """,
     "auth_bypass": """
 AUTHENTICATION BYPASS constraints:
-- Context: Login, session management, authorization checks
-- secure_code MUST properly validate credentials and enforce authorization checks
-- insecure_code MUST have flawed logic allowing bypass (e.g., always returns success, skips validation, weak checks)
-- Test should verify that:
-  * Normal valid credentials work for both versions
-  * Invalid/malicious credentials are REJECTED (return None/False/raise exception) in secure version
-  * Invalid/malicious credentials SUCCEED in insecure version (this causes the test to fail)
-- Example: Test login('', '') should return None (secure) but return valid user (insecure, test fails)
+- Context: Login/authentication validation function
+- secure_code MUST properly validate BOTH username AND password (use 'and' logic, check against database/dict)
+- insecure_code MUST have subtle logic flaw: use 'or' instead of 'and', skip password check, always return success, etc.
+- Both secure and insecure MUST define the SAME function name
+- To reach 20 lines: module docstring, imports (typing), mock user database as dict/list, function docstring with Args/Returns, multiple validation steps
+- Test must verify empty/wrong credentials return None (secure) but may return user object (insecure, causing test to fail)
+- Common patterns: OR vs AND, missing password check, truthy check on username only
 """,
 }
 
@@ -332,12 +321,16 @@ UNIVERSAL Constraints:
   (3) import from 'snippet' module (e.g., 'from snippet import function_name')
 - The tests should be deterministic and self-contained
 - vulnerable_lines should point to the vulnerable statement(s) in insecure_code
+- CRITICAL: Both secure_code and insecure_code must define the EXACT SAME function name
 
 === CRITICAL CODE LENGTH REQUIREMENT - READ CAREFULLY ===
 CODE MUST BE EXACTLY 20-35 LINES. This is MANDATORY and AUTOMATICALLY VERIFIED.
 - Code under 20 lines will be AUTOMATICALLY REJECTED by the system
 - Code over 35 lines will be AUTOMATICALLY REJECTED by the system
-- Count your lines before responding - both secure_code and insecure_code must be 20-35 lines
+- BOTH secure_code AND insecure_code must be 20-35 lines - count before responding!
+- CRITICAL: Make both versions SAME LENGTH (within 1-2 lines) - they should have identical structure
+- The ONLY difference between versions should be the security fix itself
+- Use empty lines, multi-line docstrings, helper functions, and detailed logic to reach 20 lines in BOTH versions
 
 HOW TO REACH 20+ LINES (REQUIRED):
 1. Add module-level docstring (3-4 lines)
