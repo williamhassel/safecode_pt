@@ -107,129 +107,52 @@ CHALLENGE_SCHEMA: Dict[str, Any] = {
 VULN_GUIDANCE = {
     "sqli": """
 SQL INJECTION constraints:
-- Use sqlite3 for database operations with in-memory database (:memory:)
-- secure_code MUST use parameterized queries (? or named placeholders)
-- insecure_code MUST be vulnerable via: string formatting, dynamic query construction, LIKE injection, ORDER BY injection, etc.
-- CRITICAL: Tests MUST set up the database schema and insert test data in a setup function or fixture
-- Use pytest fixtures or setup code to create tables and populate test data
-- Test should verify malicious input returns None/empty (secure) vs actual data (insecure)
-- Example test pattern:
-  ```python
-  import sqlite3
-  import pytest
-  from snippet import get_user
-
-  @pytest.fixture
-  def setup_db():
-      conn = sqlite3.connect(':memory:')
-      c = conn.cursor()
-      c.execute('CREATE TABLE users (id INTEGER, username TEXT, email TEXT)')
-      c.execute('INSERT INTO users VALUES (1, "alice", "alice@example.com")')
-      c.execute('INSERT INTO users VALUES (2, "bob", "bob@example.com")')
-      conn.commit()
-      conn.close()
-      return ':memory:'
-
-  def test_sqli(setup_db):
-      # Normal query should work
-      result = get_user(1)
-      assert result is not None
-
-      # SQL injection should be blocked (secure) or succeed (insecure)
-      result = get_user("1 OR 1=1")
-      assert result is None  # Secure blocks it, insecure allows it
-  ```
-- OR use in-memory shared database that both code and test can access
+- The function takes a database CONNECTION object and a user-provided search value as parameters
+- secure_code MUST use parameterized queries: cursor.execute("SELECT ... WHERE col = ?", (value,))
+- insecure_code MUST use f-string: cursor.execute(f"SELECT ... WHERE col = {value}")
+- The function should NOT create tables or insert data - it only queries an existing database
+- CRITICAL: Aim for exactly 25 lines per version. Do NOT exceed 30 lines.
+- Include: module docstring (3 lines), import sqlite3 + typing, function with docstring, query logic, error handling
+- The TEST must create the in-memory database, create table, insert rows, then call the function
+- Test verifies: normal input returns data, SQL injection input like "1 OR 1=1" returns None (secure) vs all rows (insecure)
 """,
     "xss": """
 XSS (Cross-Site Scripting) constraints:
-- Context: Simple HTML generation function (NO Flask/Django - not installed in container)
-- secure_code MUST properly escape HTML output using ONLY Python's built-in html.escape()
-- insecure_code MUST directly insert user input into HTML string without escaping
-- Function should return HTML string, NOT render templates
-- DO NOT import Flask, Django, or any web frameworks - use ONLY: import html
-- CRITICAL: Both versions must define the SAME function name (e.g., 'render_comment')
-- MANDATORY: BOTH secure_code AND insecure_code MUST be 20-35 lines. Count carefully!
-  * Start with: module docstring (3 lines), blank line, imports (2-3 lines), blank line
-  * Function def with docstring (1 + 5-7 lines for docstring including Args/Returns)
-  * Function body (8-12 lines of actual logic)
-  * Make BOTH versions nearly identical in structure - ONLY difference is html.escape() presence
-  * If one version is 22 lines, the other should also be ~22 lines (not 17!)
-  * Add extra validation checks, comments, or expanded HTML if needed to reach 20 lines
-- Test should verify malicious input like '<script>alert(1)</script>' is escaped (secure) vs rendered as-is (insecure)
-- Example pattern:
-  ```python
-  # SECURE VERSION (secure_code):
-  import html
-  from datetime import datetime
-
-  def render_user_comment(username, comment, timestamp=None):
-      # Escape all user-provided content
-      safe_username = html.escape(username)
-      safe_comment = html.escape(comment)
-
-      if timestamp is None:
-          timestamp = datetime.now().strftime('%Y-%m-%d %H:%M')
-
-      return f'''
-      <div class="comment-container">
-          <div class="comment-header">
-              <span class="username">{safe_username}</span>
-              <span class="timestamp">{timestamp}</span>
-          </div>
-          <div class="comment-body">
-              <p>{safe_comment}</p>
-          </div>
-      </div>
-      '''
-
-  # INSECURE VERSION (insecure_code):
-  from datetime import datetime
-
-  def render_user_comment(username, comment, timestamp=None):
-      # VULNERABLE: No escaping of user input!
-      if timestamp is None:
-          timestamp = datetime.now().strftime('%Y-%m-%d %H:%M')
-
-      return f'''
-      <div class="comment-container">
-          <div class="comment-header">
-              <span class="username">{username}</span>
-              <span class="timestamp">{timestamp}</span>
-          </div>
-          <div class="comment-body">
-              <p>{comment}</p>
-          </div>
-      </div>
-      '''
-
-  # TEST (imports the SAME function name from both versions):
-  from snippet import render_user_comment
-
-  def test_xss():
-      # Normal input works
-      result = render_user_comment('Alice', 'Hello world')
-      assert 'Alice' in result
-      assert 'Hello world' in result
-
-      # Malicious input is escaped (secure) vs rendered (insecure)
-      result = render_user_comment('Bob', '<script>alert(1)</script>')
-      assert '<script>' not in result  # Passes on secure, fails on insecure
-      assert '&lt;script&gt;' in result  # Passes on secure, fails on insecure
-  ```
+- Context: HTML generation function using ONLY built-in html module (NO Flask/Django)
+- secure_code MUST use html.escape() on user input before inserting into HTML
+- insecure_code MUST insert user input directly into HTML without escaping
+- CRITICAL: Both versions must be IDENTICAL except for html.escape() calls
+- BOTH versions MUST have ALL of these sections (copy-paste structure between versions):
+  1. Module docstring (3 lines)
+  2. import html / from typing import Optional (2 lines)
+  3. Blank line (1 line)
+  4. Function def with 3 parameters: title, content, author (1 line)
+  5. Function docstring with Args/Returns (4 lines)
+  6. Input validation for None/empty with defaults (2-3 lines)
+  7. HTML string construction with 4 tags: div, h1, p, span (5-6 lines)
+  8. Return statement (1 line)
+- This gives 22-26 lines per version. BOTH versions must be 20-30 lines. Do NOT exceed 30.
+- Test verifies '<script>alert(1)</script>' is escaped (secure) vs present as-is (insecure)
 """,
     "path_traversal": """
 PATH TRAVERSAL constraints:
 - Context: File path validation function (VALIDATION ONLY - NO actual file I/O)
-- secure_code MUST validate/sanitize paths: reject '..', use os.path.basename(), validate against whitelist
-- insecure_code MUST directly accept user paths without validation (allows '../' sequences)
-- Function should return sanitized path string or None if invalid
-- CRITICAL: DO NOT open/read/write files - ONLY validate the path string
-- Both secure and insecure MUST define the SAME function name
-- To reach 20 lines: add module docstring, imports (os, pathlib), function docstring with Args/Returns, multiple validation checks, error handling
-- Test MUST import from 'snippet' and verify:
-  * Normal filename like 'report.pdf' returns valid path (both versions)
-  * Path with '../../etc/passwd' returns None (secure) or unsafe path (insecure, test fails)
+- secure_code MUST reject '..', use os.path.basename(), validate input
+- insecure_code MUST accept user paths without directory traversal checks
+- CRITICAL: Both versions must be IDENTICAL except for the security checks
+- BOTH versions MUST have ALL of these sections (copy-paste structure):
+  1. Module docstring (3 lines)
+  2. import os / from typing import Optional (2 lines)
+  3. Blank line, allowed extensions list (2 lines)
+  4. Function def with base_dir parameter (1 line)
+  5. Function docstring (4-5 lines)
+  6. Null/empty check (2 lines)
+  7. Security checks in secure / comments in insecure (3-4 lines)
+  8. Path construction with os.path.join (2-3 lines)
+  9. Return statement (1 line)
+- This gives 22-25 lines per version. BOTH versions MUST be 20-30 lines. DO NOT open/read files.
+- CRITICAL: Code under 20 lines will be REJECTED. Include ALL numbered sections above.
+- Test verifies '../../etc/passwd' returns None (secure) vs path string (insecure, test fails)
 """,
     "cmdi": """
 COMMAND INJECTION constraints:
@@ -237,76 +160,148 @@ COMMAND INJECTION constraints:
 - secure_code MUST use shell=False with list arguments: ['ls', '-l', user_input]
 - insecure_code MUST use shell=True with string formatting: f"ls -l {user_input}"
 - CRITICAL: Use ONLY built-in Unix commands: echo, ls, cat, pwd, date, whoami (NO ffmpeg, convert, imagemagick!)
-- Both secure and insecure MUST define the SAME function name
-- To reach 20 lines: module docstring, imports (subprocess, typing, shlex), function docstring with Args/Returns, try/except blocks, multiple validation steps
+- CRITICAL: Both versions must be IDENTICAL except for shell=True vs shell=False
+- BOTH versions MUST have ALL of these sections (copy-paste structure):
+  1. Module docstring (3 lines)
+  2. import subprocess / import shlex / from typing import Optional (3 lines)
+  3. Blank line (1 line)
+  4. Function def taking command_input parameter (1 line)
+  5. Function docstring with Args/Returns (4-5 lines)
+  6. Input validation for None/empty (2 lines)
+  7. Input sanitization with shlex in secure / comment in insecure (2 lines)
+  8. Try block: subprocess.run call with shell=False (secure) or shell=True (insecure) (3-4 lines)
+  9. Process and return result (2 lines)
+  10. Except block with error handling (2-3 lines)
+- This gives 24-28 lines per version. BOTH versions must be 20-30 lines.
 - Tests MUST use unittest.mock.patch to mock subprocess.run - NEVER execute real commands
 - Test must verify secure uses shell=False and insecure uses shell=True
-- Test pattern: import patch and MagicMock from unittest.mock, patch subprocess.run, check kwargs in call_args_list
 """,
     "xxe": """
 XXE (XML External Entity) constraints:
 - Context: XML parsing with xml.etree.ElementTree (built-in)
-- secure_code MUST disable external entities: parser.entity = {}, parser.resolve_entities = False
-- insecure_code MUST use default parser (processes external entities)
-- DO NOT use defusedxml (not installed) - use xml.etree.ElementTree
-- Both versions MUST define SAME function name
-- To reach 20 lines: module docstring, imports, function docstring, try/except, parse logic, result processing
-- Test provides malicious XML with <!ENTITY> declaration, verifies secure blocks it
+- secure_code MUST disable external entities or reject DTD declarations
+- insecure_code MUST use default parser without entity restrictions
+- DO NOT use defusedxml (not installed) - use xml.etree.ElementTree ONLY
+- CRITICAL: Both versions must be IDENTICAL except for the entity/DTD check
+- BOTH versions MUST have ALL of these sections (copy-paste structure):
+  1. Module docstring (3 lines)
+  2. import xml.etree.ElementTree as ET / from typing import Optional, Dict (2 lines)
+  3. Blank line (1 line)
+  4. Function def taking xml_string parameter (1 line)
+  5. Function docstring with Args/Returns (4-5 lines)
+  6. Input validation for None/empty (2 lines)
+  7. DTD/entity check in secure / comment placeholder in insecure (3-4 lines)
+  8. Try block: parse XML with ET.fromstring (2 lines)
+  9. Extract 2-3 fields from parsed tree using findtext (3-4 lines)
+  10. Build result dict (2 lines)
+  11. Return result dict (1 line)
+  12. Except block with error handling (2-3 lines)
+- This gives 24-30 lines per version. BOTH versions must be 20-30 lines.
+- Test provides XML with <!ENTITY> or <!DOCTYPE>, verifies secure blocks it
 """,
     "insecure_deser": """
 INSECURE DESERIALIZATION constraints:
-- Context: Data deserialization
+- Context: Data deserialization function
 - secure_code MUST use json.loads() for safe deserialization
 - insecure_code MUST use pickle.loads() on untrusted data (vulnerable)
-- Both versions MUST define SAME function name
-- To reach 20 lines: module docstring, imports (json, pickle, base64), docstring, error handling, data validation
-- Test provides base64-encoded serialized data, verifies secure uses JSON and insecure uses pickle
-- Test should check that secure version rejects pickle data or only accepts JSON format
+- CRITICAL: Both versions must be IDENTICAL except for json vs pickle usage
+- BOTH versions MUST have ALL of these sections (copy-paste structure):
+  1. Module docstring (3 lines)
+  2. imports: json/pickle, base64, from typing import Optional, Dict (2 lines)
+  3. Blank line (1 line)
+  4. Function def taking data_string parameter (1 line)
+  5. Function docstring with Args/Returns (4-5 lines)
+  6. Input validation for None/empty (2 lines)
+  7. Try block: decode base64 (2 lines)
+  8. Deserialize: json.loads in secure / pickle.loads in insecure (1-2 lines)
+  9. Validate result type is dict (2 lines)
+  10. Return result (1 line)
+  11. Except block with error handling (2-3 lines)
+- This gives 22-27 lines per version. CRITICAL: Do NOT exceed 30 lines.
+- Test provides base64-encoded JSON data and verifies both can parse it
+- Test also provides pickle-specific data that only insecure version processes unsafely
 """,
     "ssrf": """
 SSRF (Server-Side Request Forgery) constraints:
-- Context: URL validation for HTTP requests (validation only, DO NOT make actual requests)
-- secure_code MUST validate URLs: check against whitelist, block internal IPs (127.0.0.1, 192.168.x.x, 10.x.x.x, localhost)
-- insecure_code MUST directly accept user URLs without validation
-- Both versions MUST define SAME function name, return validated URL or None
-- MANDATORY: BOTH versions MUST be 20-35 lines. Do NOT exceed 35 lines!
-  * Target 25-30 lines for both versions to stay safely within limits
-  * Start with: module docstring (2-3 lines), blank line, imports (2 lines), blank line
-  * Function def with docstring (1 + 4-6 lines for concise docstring)
-  * Function body with try/except, URL parsing, basic validation (8-12 lines)
-  * The ONLY difference: secure validates IPs, insecure skips this check
-  * Keep code concise - if approaching 35 lines, remove extra comments or blank lines
-- Test verifies internal IPs are blocked (secure returns None, insecure returns URL, test fails)
+- Context: URL validation function (validation only, DO NOT make actual HTTP requests)
+- secure_code MUST validate URLs and block internal/private IPs
+- insecure_code MUST accept any URL without checking the IP
+- CRITICAL: Both versions must have IDENTICAL structure. The ONLY difference is:
+  secure has an if-block checking IP against blocked prefixes, insecure has a comment instead
+- Keep it SIMPLE. Do NOT use socket.gethostbyname. Just check the hostname string directly.
+- BOTH versions MUST follow this EXACT structure (aim for 24 lines each):
+  1. Module docstring (3 lines)
+  2. from urllib.parse import urlparse / from typing import Optional (2 lines)
+  3. Blank line (1 line)
+  4. Function def taking url parameter (1 line)
+  5. Function docstring (3 lines)
+  6. Input validation for None/empty (2 lines)
+  7. parsed = urlparse(url), check scheme (3 lines)
+  8. hostname = parsed.hostname (1 line)
+  9. IP check: secure checks hostname against ("127.0.0.1","localhost","10.","192.168.") / insecure has comment (3 lines)
+  10. Return url (1 line)
+- CRITICAL: Do NOT exceed 30 lines. Aim for exactly 24 lines. Keep docstrings SHORT (1-line).
+- Use ONLY urllib.parse (no socket, no requests)
+- Test verifies http://127.0.0.1/admin returns None (secure) vs URL string (insecure, test fails)
 """,
     "weak_crypto": """
 WEAK CRYPTOGRAPHY constraints:
-- Context: Password hashing or token generation
-- secure_code MUST use hashlib.sha256 WITH salt (using secrets module) OR secrets.token_hex() for tokens
-- insecure_code MUST use hashlib.md5 without salt OR random.random()/random.randint() for tokens
+- Context: Password hashing function
+- secure_code MUST use hashlib.sha256 WITH salt (using secrets module)
+- insecure_code MUST use hashlib.md5 WITHOUT salt
 - DO NOT use bcrypt/scrypt (not installed) - use built-in hashlib and secrets modules
-- Both versions MUST define SAME function name
-- To reach 20 lines: module docstring, imports, helper functions, docstrings
-- Test verifies salt is used (secure returns non-empty salt, insecure returns empty) OR token entropy
+- CRITICAL: Both versions must be IDENTICAL except for the hash algorithm and salt
+- BOTH versions MUST have ALL of these sections (copy-paste structure):
+  1. Module docstring (3 lines)
+  2. import hashlib / import secrets / from typing import Tuple (2 lines)
+  3. Blank line (1 line)
+  4. Function def taking password parameter (1 line)
+  5. Function docstring with Args/Returns explaining it returns (hash, salt) tuple (4-5 lines)
+  6. Input validation for None/empty (2 lines)
+  7. Generate salt in secure / empty salt in insecure (2 lines)
+  8. Hash computation: sha256 with salt (secure) / md5 without salt (insecure) (2-3 lines)
+  9. Return (hash_hex, salt) tuple (1 line)
+- This gives 20-25 lines per version. BOTH versions must be 20-30 lines.
+- Test verifies: secure returns non-empty salt, insecure returns empty salt
+- Test also checks that same password produces different hashes with secure (due to random salt)
 """,
     "hardcoded_creds": """
 HARDCODED CREDENTIALS constraints:
-- Context: Database connection or API client initialization
-- secure_code MUST use os.getenv() or os.environ.get() to read credentials from environment
-- insecure_code MUST have hardcoded credentials as string literals in source code
-- Both versions MUST define SAME function name
-- To reach 20 lines: module docstring, imports (os, typing), docstring, connection logic, error handling
-- Test verifies function works but should inspect that secure version doesn't contain literal password strings
-- Tricky: both versions must be functionally similar, difference is WHERE credentials come from
+- Context: Configuration/connection setup function
+- secure_code MUST use os.environ.get() to read credentials from environment variables
+- insecure_code MUST have hardcoded credential strings directly in source code
+- CRITICAL: Both versions must be IDENTICAL except for how credentials are obtained
+- BOTH versions MUST have ALL of these sections (copy-paste structure):
+  1. Module docstring (3 lines)
+  2. import os / from typing import Optional, Dict (2 lines)
+  3. Blank line (1 line)
+  4. Function def taking no parameters or optional service_name (1 line)
+  5. Function docstring (3 lines)
+  6. Get credentials: os.environ.get in secure / string literals in insecure (3-4 lines)
+  7. Validate credentials not None/empty (2 lines)
+  8. Build and return config dict (3-4 lines)
+- This gives 20-24 lines per version. CRITICAL: Do NOT exceed 28 lines.
+- Test inspects source code: secure version should NOT contain literal password strings
 """,
     "auth_bypass": """
 AUTHENTICATION BYPASS constraints:
 - Context: Login/authentication validation function
-- secure_code MUST properly validate BOTH username AND password (use 'and' logic, check against database/dict)
-- insecure_code MUST have subtle logic flaw: use 'or' instead of 'and', skip password check, always return success, etc.
-- Both secure and insecure MUST define the SAME function name
-- To reach 20 lines: module docstring, imports (typing), mock user database as dict/list, function docstring with Args/Returns, multiple validation steps
-- Test must verify empty/wrong credentials return None (secure) but may return user object (insecure, causing test to fail)
-- Common patterns: OR vs AND, missing password check, truthy check on username only
+- secure_code MUST validate BOTH username AND password (use 'and' logic)
+- insecure_code MUST have logic flaw: use 'or' instead of 'and'
+- CRITICAL: Both versions must be IDENTICAL except for 'and' vs 'or' in the check
+- BOTH versions MUST follow this EXACT structure (aim for 24 lines each):
+  1. Module docstring (3 lines)
+  2. import hashlib / from typing import Optional, Dict (2 lines)
+  3. Blank line + USER_DB = one-line dict with 2 users (2 lines)
+  4. Blank line (1 line)
+  5. Function def taking username, password (1 line)
+  6. Function docstring (3 lines)
+  7. Input validation for None/empty (2 lines)
+  8. Hash password, lookup user in USER_DB (2 lines)
+  9. Check credentials: 'and' (secure) vs 'or' (insecure) (2-3 lines)
+  10. Return result (1 line)
+- CRITICAL: Aim for exactly 24 lines. Maximum 30 lines. Keep USER_DB on ONE line.
+- Test verifies wrong password returns None (secure) but returns user (insecure, test fails)
 """,
 }
 

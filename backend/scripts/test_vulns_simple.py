@@ -3,10 +3,13 @@ Simple direct test - imports only the generator function.
 
 Usage (from project root with venv activated):
     python backend/scripts/test_vulns_simple.py
+    python backend/scripts/test_vulns_simple.py --attempts 3
+    python backend/scripts/test_vulns_simple.py --type xss --attempts 5
 """
 
 import os
 import sys
+import argparse
 from datetime import datetime
 
 # Setup path
@@ -48,17 +51,12 @@ SEED_TOPICS = {
 }
 
 
-def test_vuln_type(vuln_type: str):
-    """Test a single vulnerability type"""
-    print(f"\n{'='*80}")
-    print(f"Testing: {vuln_type.upper()}")
-    print(f"{'='*80}")
-
+def test_single_attempt(vuln_type: str, attempt: int, max_attempts: int):
+    """Run one generation attempt. Returns (success, details_dict)."""
     seed_topic = SEED_TOPICS[vuln_type]
-    print(f"Seed topic: {seed_topic}")
 
     try:
-        print(f"-> Generating challenge...")
+        print(f"  Attempt {attempt}/{max_attempts} ... ", end="", flush=True)
         start_time = datetime.now()
 
         bundle = generate_challenge_bundle(
@@ -68,75 +66,84 @@ def test_vuln_type(vuln_type: str):
         )
 
         elapsed = (datetime.now() - start_time).total_seconds()
-        print(f"[OK] Generated in {elapsed:.1f}s")
 
-        # Check code length
         secure_lines = len(bundle["secure_code"].strip().splitlines())
         insecure_lines = len(bundle["insecure_code"].strip().splitlines())
 
-        print(f"-> Secure code: {secure_lines} lines")
-        print(f"-> Insecure code: {insecure_lines} lines")
-
-        # Validate length
         if secure_lines < 20 or insecure_lines < 20:
-            print(f"[FAIL] Code too short (minimum 20 lines)")
-            return False
+            print(f"FAIL  secure={secure_lines} insecure={insecure_lines}  (too short, min 20)")
+            return False, {"reason": "too_short", "secure": secure_lines, "insecure": insecure_lines}
 
         if secure_lines > 35 or insecure_lines > 35:
-            print(f"[FAIL] Code too long (maximum 35 lines)")
-            return False
+            print(f"FAIL  secure={secure_lines} insecure={insecure_lines}  (too long, max 35)")
+            return False, {"reason": "too_long", "secure": secure_lines, "insecure": insecure_lines}
 
-        print(f"[OK] Code length valid")
-
-        # Show preview
-        print(f"\nSecure code preview (first 5 lines):")
-        for i, line in enumerate(bundle["secure_code"].splitlines()[:5], 1):
-            print(f"  {i}: {line}")
-        print(f"  ...")
-
-        print(f"\n[SUCCESS]")
-        print(f"  Vulnerable lines: {bundle['vulnerable_lines']}")
-
-        return True
+        print(f"OK    secure={secure_lines} insecure={insecure_lines}  ({elapsed:.1f}s)")
+        return True, {"secure": secure_lines, "insecure": insecure_lines, "time": elapsed}
 
     except Exception as e:
-        print(f"[FAIL] {str(e)[:300]}")
-        return False
+        print(f"ERROR {str(e)[:100]}")
+        return False, {"reason": "exception", "error": str(e)[:200]}
+
+
+def test_vuln_type(vuln_type: str, max_attempts: int):
+    """Test a vulnerability type with multiple attempts. Returns (successes, attempts, details)."""
+    print(f"\n{'='*80}")
+    print(f" {vuln_type.upper()}")
+    print(f"{'='*80}")
+
+    successes = 0
+    details = []
+
+    for attempt in range(1, max_attempts + 1):
+        success, info = test_single_attempt(vuln_type, attempt, max_attempts)
+        details.append(info)
+        if success:
+            successes += 1
+
+    rate = (successes / max_attempts) * 100
+    print(f"  Result: {successes}/{max_attempts} passed ({rate:.0f}%)")
+    return successes, max_attempts, details
 
 
 def main():
-    """Test all vulnerability types"""
-    print("="*80)
-    print("Testing All 10 OWASP Vulnerability Types")
-    print("="*80)
+    parser = argparse.ArgumentParser(description="Test OWASP vulnerability types")
+    parser.add_argument("--attempts", type=int, default=3, help="Attempts per type (default: 3)")
+    parser.add_argument("--type", type=str, choices=VULN_TYPES, help="Test only one type")
+    args = parser.parse_args()
+
+    types_to_test = [args.type] if args.type else VULN_TYPES
+
+    print("=" * 80)
+    print(f"Testing {len(types_to_test)} vulnerability type(s), {args.attempts} attempt(s) each")
+    print("=" * 80)
 
     results = {}
-
-    for vuln_type in VULN_TYPES:
-        success = test_vuln_type(vuln_type)
-        results[vuln_type] = success
+    for vuln_type in types_to_test:
+        successes, attempts, details = test_vuln_type(vuln_type, args.attempts)
+        results[vuln_type] = (successes, attempts, details)
 
     # Summary
-    print("\n" + "="*80)
-    print("SUMMARY")
-    print("="*80)
+    print("\n" + "=" * 80)
+    print(" SUMMARY")
+    print("=" * 80)
+    print(f"\n  {'Type':<20} {'Pass Rate':<15} {'Result'}")
+    print(f"  {'-'*20} {'-'*15} {'-'*10}")
 
-    successful = [v for v, s in results.items() if s]
-    failed = [v for v, s in results.items() if not s]
+    all_reliable = True
+    for vuln_type in types_to_test:
+        successes, attempts, details = results[vuln_type]
+        rate = (successes / attempts) * 100
+        status = "OK" if successes == attempts else ("PARTIAL" if successes > 0 else "FAIL")
+        if successes < attempts:
+            all_reliable = False
+        print(f"  {vuln_type:<20} {successes}/{attempts} ({rate:3.0f}%)      {status}")
 
-    print(f"\n[OK] Successful: {len(successful)}/{len(VULN_TYPES)}")
-    for v in successful:
-        print(f"  - {v}")
+    total_s = sum(r[0] for r in results.values())
+    total_a = sum(r[1] for r in results.values())
+    print(f"\n  Overall: {total_s}/{total_a} ({total_s/total_a*100:.0f}%)")
 
-    if failed:
-        print(f"\n[FAIL] Failed: {len(failed)}/{len(VULN_TYPES)}")
-        for v in failed:
-            print(f"  - {v}")
-
-    success_rate = len(successful) / len(VULN_TYPES) * 100
-    print(f"\nSuccess Rate: {success_rate:.1f}%")
-
-    return 0 if len(failed) == 0 else 1
+    return 0 if all_reliable else 1
 
 
 if __name__ == "__main__":
