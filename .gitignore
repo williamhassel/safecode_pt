@@ -19,3 +19,5 @@ safecode/.import/
 safecode/export/
 *.env
 nul
+
+.claude/

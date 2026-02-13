@@ -4,7 +4,11 @@ const REFRESH_ENDPOINT = "/auth/refresh/";
 
 async function refreshAccessToken() {
   const refreshToken = localStorage.getItem("refreshToken");
-  if (!refreshToken) throw new Error("No refresh token. Please log in again.");
+  if (!refreshToken) {
+    localStorage.removeItem("accessToken");
+    window.location.reload();
+    throw new Error("No refresh token. Please log in again.");
+  }
 
   const res = await fetch(`${API_BASE}${REFRESH_ENDPOINT}`, {
     method: "POST",
@@ -13,7 +17,10 @@ async function refreshAccessToken() {
   });
 
   if (!res.ok) {
-    // Refresh token expired/invalid → user must re-login
+    // Refresh token expired/invalid → clear storage and redirect to login
+    localStorage.removeItem("accessToken");
+    localStorage.removeItem("refreshToken");
+    window.location.reload();
     throw new Error("Session expired. Please log in again.");
   }
 

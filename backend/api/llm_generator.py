@@ -273,15 +273,26 @@ HARDCODED CREDENTIALS constraints:
 - CRITICAL: Both versions must be IDENTICAL except for how credentials are obtained
 - BOTH versions MUST have ALL of these sections (copy-paste structure):
   1. Module docstring (3 lines)
-  2. import os / from typing import Optional, Dict (2 lines)
+  2. import os / from typing import Dict (2 lines)
   3. Blank line (1 line)
-  4. Function def taking no parameters or optional service_name (1 line)
-  5. Function docstring (3 lines)
-  6. Get credentials: os.environ.get in secure / string literals in insecure (3-4 lines)
-  7. Validate credentials not None/empty (2 lines)
-  8. Build and return config dict (3-4 lines)
-- This gives 20-24 lines per version. CRITICAL: Do NOT exceed 28 lines.
-- Test inspects source code: secure version should NOT contain literal password strings
+  4. APP_NAME constant string (1 line)
+  5. Blank line (1 line)
+  6. Function def get_db_config taking no parameters (1 line)
+  7. Function docstring with Returns (4 lines)
+  8. Get username: os.environ.get("DB_USERNAME", "guest") in secure / "admin" in insecure (1 line)
+  9. Get password: os.environ.get("DB_PASSWORD", "") in secure / "secret123" in insecure (1 line)
+  10. Get host: os.environ.get("DB_HOST", "localhost") in both (1 line)
+  11. Build config dict with username/password/host/app_name (3 lines)
+  12. Return config (1 line)
+- This gives 22-26 lines per version. CRITICAL: Do NOT exceed 28 lines. Do NOT raise ValueError.
+- CRITICAL TEST REQUIREMENT: The test MUST set environment variables BEFORE calling the secure function:
+  os.environ["DB_USERNAME"] = "env_user"
+  os.environ["DB_PASSWORD"] = "env_pass"
+  config = get_db_config()
+  assert config["username"] == "env_user"   # secure: reads from env
+  assert config["password"] == "env_pass"   # secure: reads from env
+  # insecure test: config["username"] == "admin" (hardcoded literal)
+- Use os.environ.get() with defaults (empty string or "guest") - NOT raise ValueError
 """,
     "auth_bypass": """
 AUTHENTICATION BYPASS constraints:
