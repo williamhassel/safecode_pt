@@ -4,25 +4,31 @@ import "./HomePage.css";
 
 export default function HomePage() {
   const [stats, setStats] = useState(null);
+  const [isStaff, setIsStaff] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
   useEffect(() => {
-    fetchStats();
+    fetchData();
   }, []);
 
-  const fetchStats = async () => {
+  const fetchData = async () => {
     try {
-      const response = await getWithAuth("/stats/");
+      const [statsRes, meRes] = await Promise.all([
+        getWithAuth("/stats/"),
+        getWithAuth("/auth/me/"),
+      ]);
 
-      if (!response.ok) {
-        throw new Error("Failed to fetch stats");
-      }
-
-      const data = await response.json();
+      if (!statsRes.ok) throw new Error("Failed to fetch stats");
+      const data = await statsRes.json();
       setStats(data);
+
+      if (meRes.ok) {
+        const me = await meRes.json();
+        setIsStaff(!!me.is_staff);
+      }
     } catch (err) {
-      console.error("Error fetching stats:", err);
+      console.error("Error fetching data:", err);
       setError(err.message);
     } finally {
       setLoading(false);
@@ -136,6 +142,15 @@ export default function HomePage() {
           <button onClick={handlePlayGame} className="play-btn">
             Continue Training
           </button>
+          {isStaff && (
+            <button
+              onClick={() => { window.location.href = "/admin-review"; }}
+              className="play-btn"
+              style={{ marginTop: "0.75rem", background: "linear-gradient(135deg, #1a1a2e, #0f3460)" }}
+            >
+              Review Challenge Queue (Admin)
+            </button>
+          )}
         </div>
       </div>
     </div>
