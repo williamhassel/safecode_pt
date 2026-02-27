@@ -15,6 +15,11 @@ from backend.api.views import (
     GeneratorStatusView,
     GeneratorChallengeView,
     LatestChallengeView,
+    NextChallengeView,
+    AdminReviewQueueView,
+    AdminChallengeApproveView,
+    AdminChallengeDiscardView,
+    AdminPoolStatsView,
 )
 
 router = routers.DefaultRouter()
@@ -42,4 +47,11 @@ urlpatterns = [
     path('api/generator/generation/<int:generation_id>/', GeneratorStatusView.as_view(), name='generator-status'),
     path('api/generator/challenge/<int:challenge_id>/', GeneratorChallengeView.as_view(), name='generator-challenge'),
     path('api/generator/latest/', LatestChallengeView.as_view(), name='latest-challenge'),
+    path('api/generator/next/', NextChallengeView.as_view(), name='next-challenge'),
+
+    # Admin review queue
+    path('api/admin/review-queue/', AdminReviewQueueView.as_view(), name='admin-review-queue'),
+    path('api/admin/challenges/<int:challenge_id>/approve/', AdminChallengeApproveView.as_view(), name='admin-challenge-approve'),
+    path('api/admin/challenges/<int:challenge_id>/discard/', AdminChallengeDiscardView.as_view(), name='admin-challenge-discard'),
+    path('api/admin/pool-stats/', AdminPoolStatsView.as_view(), name='admin-pool-stats'),
 ]

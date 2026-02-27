@@ -1,10 +1,18 @@
 # backend/app/tasks.py
+import logging
 import random
 from celery import shared_task
 from django.db import transaction
 from .models import GenerationRequest, GeneratedChallenge
 from .docker_runner import run_in_container
 from .llm_generator import generate_challenge_bundle
+
+logger = logging.getLogger(__name__)
+
+POOL_TARGET = 100       # total pooled challenges to maintain
+POOL_MIN_PER_TYPE = 10  # minimum per vulnerability type
+POOL_REFILL_THRESHOLD = 20  # trigger refill when total drops below this
+REVIEW_QUEUE_TARGET = 10  # challenges pre-generated for admin review
 
 MAX_LLM_ATTEMPTS = 5
 
@@ -296,3 +304,160 @@ def generate_challenge(generation_id: int):
         gr.error = str(e)
         gr.save(update_fields=["status", "error"])
         raise
+
+
+def _generate_and_save_challenge(vuln_type=None, is_pooled=False, status='pending_review'):
+    """Generate a single validated challenge and save it to the database.
+
+    Returns the GeneratedChallenge instance on success, or None on failure.
+    """
+    if vuln_type is None:
+        vuln_type = random.choice(VULNERABILITY_TYPES)
+
+    seed_topics = SEED_TOPICS_BY_VULN.get(vuln_type, ["generic application"])
+
+    for attempt in range(1, MAX_LLM_ATTEMPTS + 1):
+        seed_topic = random.choice(seed_topics)
+        try:
+            bundle = generate_challenge_bundle(
+                vuln_type=vuln_type,
+                seed_topic=seed_topic,
+                difficulty="easy",
+            )
+        except Exception as exc:
+            logger.warning("Challenge generation attempt %d/%d failed (LLM error): %s", attempt, MAX_LLM_ATTEMPTS, exc)
+            continue
+
+        secure_code = bundle["secure_code"]
+        insecure_code = bundle["insecure_code"]
+        tests = bundle["tests"]
+        vuln_lines = bundle["vulnerable_lines"]
+
+        if len(secure_code.strip().splitlines()) < 20 or len(insecure_code.strip().splitlines()) < 20:
+            continue
+        if len(secure_code.strip().splitlines()) > 35 or len(insecure_code.strip().splitlines()) > 35:
+            continue
+
+        secure_results = run_in_container({"code": secure_code, "tests": tests})
+        insecure_results = run_in_container({"code": insecure_code, "tests": tests})
+
+        secure_ok = secure_results.get("ok") and secure_results.get("tests", {}).get("returncode") == 0
+        insecure_ok = insecure_results.get("ok") and insecure_results.get("tests", {}).get("returncode") != 0
+
+        if not (secure_ok and insecure_ok):
+            continue
+
+        # Build distractor options
+        code_lines = insecure_code.splitlines()
+        total_lines = len(code_lines)
+        all_line_numbers = set(range(1, total_lines + 1))
+        vuln_line_set = set(vuln_lines)
+        available_lines = sorted(all_line_numbers - vuln_line_set)
+        use_ranges = len(vuln_lines) > 1
+
+        candidate_lines = [
+            ln for ln in available_lines
+            if code_lines[ln - 1].strip() and code_lines[ln - 1].strip() not in ['{', '}', '(', ')', '"""', "'''", "''", '""']
+        ]
+
+        distractors = []
+        if len(candidate_lines) >= 3:
+            anchors = [candidate_lines[0], candidate_lines[len(candidate_lines) // 2], candidate_lines[-1]]
+            for anchor in anchors:
+                if use_ranges:
+                    start = max(1, anchor - random.randint(0, 1))
+                    end = min(total_lines, start + random.choice([2, 3]) - 1)
+                    lr = list(range(start, end + 1))
+                    if not any(l in vuln_lines for l in lr):
+                        distractors.append({"lines": lr, "label": ""})
+                else:
+                    if random.random() < 0.5 and anchor < total_lines - 1:
+                        sz = random.choice([2, 3])
+                        lr = [anchor + i for i in range(min(sz, total_lines - anchor + 1))]
+                        if not any(l in vuln_lines for l in lr):
+                            distractors.append({"lines": lr, "label": ""})
+                    else:
+                        distractors.append({"lines": [anchor], "label": ""})
+
+        while len(distractors) < 3:
+            anchor = random.choice(candidate_lines) if candidate_lines else 1
+            distractors.append({"lines": [anchor], "label": ""})
+
+        all_options = [{"lines": vuln_lines, "label": "", "correct": True}] + \
+                      [{"lines": d["lines"], "label": "", "correct": False} for d in distractors]
+        random.shuffle(all_options)
+        shuffled_options = [{"lines": o["lines"], "label": o["label"]} for o in all_options]
+
+        artifact = {
+            **bundle,
+            "options": shuffled_options,
+            "verification": {"secure": secure_results, "insecure": insecure_results, "attempt": attempt},
+        }
+
+        gr = GenerationRequest.objects.create(status="done")
+        ch = GeneratedChallenge.objects.create(
+            generation=gr,
+            language=bundle["language"],
+            vuln_type=bundle["vuln_type"],
+            difficulty=bundle["difficulty"],
+            artifact=artifact,
+            is_pooled=is_pooled,
+            status=status,
+        )
+        logger.info("Generated %s challenge #%d (status=%s, is_pooled=%s)", vuln_type, ch.id, status, is_pooled)
+        return ch
+
+    logger.warning("Failed to generate %s challenge after %d attempts", vuln_type, MAX_LLM_ATTEMPTS)
+    return None
+
+
+def _generate_one_pooled_challenge(vuln_type=None):
+    """Generate a single validated challenge and add it directly to the pool."""
+    return _generate_and_save_challenge(vuln_type=vuln_type, is_pooled=True, status='approved')
+
+
+@shared_task
+def populate_challenge_pool():
+    """Fill the challenge pool up to POOL_TARGET (POOL_MIN_PER_TYPE per vuln type)."""
+    counts = {vt: GeneratedChallenge.objects.filter(is_pooled=True, vuln_type=vt).count()
+              for vt in VULNERABILITY_TYPES}
+    total = sum(counts.values())
+    logger.info("Pool populate started. Current counts: %s (total=%d)", counts, total)
+
+    added = 0
+    for vuln_type in VULNERABILITY_TYPES:
+        needed = max(0, POOL_MIN_PER_TYPE - counts[vuln_type])
+        for _ in range(needed):
+            ch = _generate_one_pooled_challenge(vuln_type=vuln_type)
+            if ch:
+                added += 1
+
+    logger.info("Pool populate complete. Added %d challenges.", added)
+    return added
+
+
+@shared_task
+def refill_pool_if_low():
+    """Periodic task: top up the pool if total drops below POOL_REFILL_THRESHOLD."""
+    total = GeneratedChallenge.objects.filter(is_pooled=True).count()
+    logger.info("Pool refill check: %d pooled challenges available.", total)
+    if total < POOL_REFILL_THRESHOLD:
+        logger.info("Pool below threshold (%d), triggering populate.", POOL_REFILL_THRESHOLD)
+        populate_challenge_pool.delay()
+
+
+@shared_task
+def fill_review_queue():
+    """Generate challenges for the admin review queue up to REVIEW_QUEUE_TARGET."""
+    pending = GeneratedChallenge.objects.filter(status='pending_review').count()
+    needed = max(0, REVIEW_QUEUE_TARGET - pending)
+    logger.info("Review queue fill started. Pending=%d, needed=%d", pending, needed)
+
+    added = 0
+    for _ in range(needed):
+        ch = _generate_and_save_challenge(is_pooled=False, status='pending_review')
+        if ch:
+            added += 1
+
+    logger.info("Review queue fill complete. Added %d challenges.", added)
+    return added

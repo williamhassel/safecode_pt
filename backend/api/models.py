@@ -92,9 +92,16 @@ class GenerationRequest(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
 
 class GeneratedChallenge(models.Model):
+    STATUS_CHOICES = [
+        ('pending_review', 'Pending Review'),
+        ('approved', 'Approved'),
+        ('discarded', 'Discarded'),
+    ]
     generation = models.OneToOneField(GenerationRequest, on_delete=models.CASCADE, related_name="challenge")
     language = models.CharField(max_length=32, default="python")
     vuln_type = models.CharField(max_length=64, default="sqli")
     difficulty = models.CharField(max_length=16, default="easy")
     artifact = models.JSONField()  # full challenge JSON
     created_at = models.DateTimeField(auto_now_add=True)
+    is_pooled = models.BooleanField(default=False)  # True = available in challenge pool
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='approved')
