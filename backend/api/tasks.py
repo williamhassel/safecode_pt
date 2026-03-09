@@ -6,6 +6,7 @@ from django.db import transaction
 from .models import GenerationRequest, GeneratedChallenge
 from .docker_runner import run_in_container
 from .llm_generator import generate_challenge_bundle
+from .static_analysis import check_challenge_with_bandit
 
 logger = logging.getLogger(__name__)
 
@@ -15,6 +16,9 @@ POOL_REFILL_THRESHOLD = 20  # trigger refill when total drops below this
 REVIEW_QUEUE_TARGET = 10  # challenges pre-generated for admin review
 
 MAX_LLM_ATTEMPTS = 5
+
+CODE_MIN_LINES = 25
+CODE_MAX_LINES = 60  # hard ceiling enforced here; prompts target 25-50
 
 # OWASP Top 10 vulnerability types to generate
 # All 10 types enabled for testing and verification
@@ -105,6 +109,91 @@ SEED_TOPICS_BY_VULN = {
     ],
 }
 
+def _is_displayable_line(line: str) -> bool:
+    """Return True if a line is an executable statement suitable as a distractor.
+
+    Rejects blank lines, comment lines, and docstring delimiter lines so that
+    the multiple-choice options never suggest a code comment is vulnerable.
+    """
+    s = line.strip()
+    if not s:
+        return False
+    if s.startswith('#'):
+        return False
+    # Standalone triple-quote delimiters (opening or closing docstrings)
+    if s in ('"""', "'''"):
+        return False
+    # Single-line docstrings that are pure string literals (not assignments)
+    if (s.startswith('"""') and s.endswith('"""')) or (s.startswith("'''") and s.endswith("'''")):
+        return False
+    return True
+
+
+def _build_distractor_options(bundle: dict, code_lines: list, vuln_lines: list) -> list:
+    """Return 3 distractor option dicts using LLM-provided options where valid.
+
+    Falls back to heuristic selection for any option the LLM got wrong.
+    Each dict has the shape {"lines": [...], "label": ""}.
+    """
+    vuln_set = set(vuln_lines)
+    total = len(code_lines)
+
+    # --- Try LLM-generated distractors first ---
+    valid: list[dict] = []
+    for option in bundle.get("distractor_options", []):
+        if not option:
+            continue
+        # Must not overlap with the answer
+        if any(ln in vuln_set for ln in option):
+            continue
+        # All referenced lines must exist and be displayable
+        if any(ln < 1 or ln > total for ln in option):
+            continue
+        if not all(_is_displayable_line(code_lines[ln - 1]) for ln in option):
+            continue
+        valid.append({"lines": list(option), "label": ""})
+        if len(valid) == 3:
+            break
+
+    # --- Heuristic fallback for any missing slots ---
+    candidate_lines = [
+        ln for ln in range(1, total + 1)
+        if ln not in vuln_set and _is_displayable_line(code_lines[ln - 1])
+    ]
+
+    while len(valid) < 3 and candidate_lines:
+        # Spread across beginning, middle, end of the code
+        positions = [0, len(candidate_lines) // 2, len(candidate_lines) - 1]
+        for pos in positions:
+            if len(valid) >= 3:
+                break
+            anchor = candidate_lines[pos]
+            # Group 2 adjacent lines when the answer is also a range
+            if len(vuln_lines) > 1 and anchor < total:
+                lr = [anchor, anchor + 1] if anchor + 1 not in vuln_set else [anchor]
+            else:
+                lr = [anchor]
+            candidate = {"lines": lr, "label": ""}
+            if candidate not in valid:
+                valid.append(candidate)
+
+        # If we still need more, pick randomly from remaining candidates
+        if len(valid) < 3:
+            remaining = [ln for ln in candidate_lines
+                         if not any(ln in d["lines"] for d in valid)]
+            if remaining:
+                anchor = random.choice(remaining)
+                valid.append({"lines": [anchor], "label": ""})
+            else:
+                break
+
+    # Pad with a safe fallback if we somehow still don't have 3
+    while len(valid) < 3:
+        valid.append({"lines": [1], "label": ""})
+
+    return valid[:3]
+
+
 @shared_task
 def generate_challenge(generation_id: int):
     gr = GenerationRequest.objects.get(id=generation_id)
@@ -134,137 +223,54 @@ def generate_challenge(generation_id: int):
             tests = bundle["tests"]
             vuln_lines = bundle["vulnerable_lines"]
 
-            # Validate code length before testing (must be 20-35 lines)
+            # Validate code length
             secure_line_count = len(secure_code.strip().splitlines())
             insecure_line_count = len(insecure_code.strip().splitlines())
 
-            if secure_line_count < 20 or insecure_line_count < 20:
+            if secure_line_count < CODE_MIN_LINES or insecure_line_count < CODE_MIN_LINES:
                 last_err = {
                     "attempt": attempt,
                     "error": "Code too short",
                     "secure_lines": secure_line_count,
                     "insecure_lines": insecure_line_count,
-                    "message": "Generated code must be at least 20 lines"
                 }
-                continue  # Try again
+                continue
 
-            if secure_line_count > 35 or insecure_line_count > 35:
+            if secure_line_count > CODE_MAX_LINES or insecure_line_count > CODE_MAX_LINES:
                 last_err = {
                     "attempt": attempt,
                     "error": "Code too long",
                     "secure_lines": secure_line_count,
                     "insecure_lines": insecure_line_count,
-                    "message": "Generated code must be at most 35 lines"
                 }
-                continue  # Try again
+                continue
 
+            # --- Verification agent: Docker test execution ---
             secure_results = run_in_container({"code": secure_code, "tests": tests})
             insecure_results = run_in_container({"code": insecure_code, "tests": tests})
 
-            # Check if docker runner completed successfully
-            secure_ok = bool(secure_results.get("ok", False))
-            insecure_ok = bool(insecure_results.get("ok", False))
+            secure_tests_passed = (
+                secure_results.get("ok") and
+                secure_results.get("tests", {}).get("returncode") == 0
+            )
+            insecure_tests_failed = (
+                insecure_results.get("ok") and
+                insecure_results.get("tests", {}).get("returncode") != 0
+            )
 
-            # Check if tests passed (returncode 0 = all tests passed)
-            secure_tests_passed = secure_ok and secure_results.get("tests", {}).get("returncode") == 0
-            insecure_tests_failed = insecure_ok and insecure_results.get("tests", {}).get("returncode") != 0
-
-            # Your acceptance criteria:
-            # secure code tests must pass, insecure code tests must fail
             if secure_tests_passed and insecure_tests_failed:
-                # Generate intelligent distractor options based on the code structure
+                # --- Static analysis agent: Bandit ---
+                bandit_result = check_challenge_with_bandit(insecure_code, secure_code, vuln_type)
+
+                # --- Distractor generation (LLM-first, heuristic fallback) ---
                 code_lines = insecure_code.splitlines()
-                total_lines = len(code_lines)
+                distractors = _build_distractor_options(bundle, code_lines, vuln_lines)
 
-                # Collect all unique line numbers that aren't the vulnerability
-                all_line_numbers = set(range(1, total_lines + 1))
-                vuln_line_set = set(vuln_lines)
-                available_lines = sorted(all_line_numbers - vuln_line_set)
-
-                # Don't use labels - they give away too much
-                # Just provide line numbers and let users analyze the code
-                vuln_label = ""  # No label for correct answer
-
-                # Determine if we should use line ranges or single lines
-                # If the vulnerable lines are a range, make distractors ranges too
-                use_ranges = len(vuln_lines) > 1
-
-                # Generate distractor options from different parts of the code
-                distractors = []
-
-                # Select lines that have actual code on them (not blank or just braces)
-                candidate_lines = []
-                for line_num in available_lines:
-                    line_content = code_lines[line_num - 1].strip() if line_num <= total_lines else ""
-                    # Only include lines with meaningful content
-                    if line_content and not line_content in ['{', '}', '(', ')', '"""', "'''", "''", '""']:
-                        candidate_lines.append(line_num)
-
-                # Create 3 distractor options
-                if len(candidate_lines) >= 3:
-                    # Spread distractors across beginning, middle, and end
-                    anchor_lines = [
-                        candidate_lines[0],  # Beginning
-                        candidate_lines[len(candidate_lines) // 2],  # Middle
-                        candidate_lines[-1] if len(candidate_lines) > 1 else candidate_lines[0],  # End
-                    ]
-
-                    for anchor_line in anchor_lines:
-                        if use_ranges:
-                            # Create a range of 2-3 lines around the anchor
-                            range_size = random.choice([2, 3])
-                            start_line = max(1, anchor_line - random.randint(0, 1))
-                            end_line = min(total_lines, start_line + range_size - 1)
-
-                            # Make sure it doesn't overlap with vulnerable lines
-                            line_range = list(range(start_line, end_line + 1))
-                            if not any(line in vuln_lines for line in line_range):
-                                distractors.append({"lines": line_range, "label": ""})
-                        else:
-                            # Use single lines, but sometimes group 2-3 adjacent lines
-                            if random.random() < 0.5 and anchor_line < total_lines - 1:
-                                # Group 2-3 lines
-                                range_size = random.choice([2, 3])
-                                line_range = [anchor_line + i for i in range(min(range_size, total_lines - anchor_line + 1))]
-                                if not any(line in vuln_lines for line in line_range):
-                                    distractors.append({"lines": line_range, "label": ""})
-                            else:
-                                # Single line
-                                distractors.append({"lines": [anchor_line], "label": ""})
-
-                # If we don't have enough distractors, add more
-                while len(distractors) < 3:
-                    if candidate_lines:
-                        anchor_line = random.choice(candidate_lines)
-                        if random.random() < 0.6:  # 60% chance of range
-                            range_size = random.choice([2, 3])
-                            start_line = max(1, anchor_line - random.randint(0, 1))
-                            end_line = min(total_lines, start_line + range_size - 1)
-                            line_range = list(range(start_line, end_line + 1))
-                            if not any(line in vuln_lines for line in line_range):
-                                new_distractor = {"lines": line_range, "label": ""}
-                                if new_distractor not in distractors:
-                                    distractors.append(new_distractor)
-                        else:
-                            new_distractor = {"lines": [anchor_line], "label": ""}
-                            if new_distractor not in distractors:
-                                distractors.append(new_distractor)
-                    else:
-                        distractors.append({"lines": [1], "label": ""})
-                        break
-
-                # Build options list with correct answer and distractors
-                all_options = [
-                    {"lines": vuln_lines, "label": vuln_label, "correct": True},
-                ] + [{"lines": d["lines"], "label": d["label"], "correct": False} for d in distractors]
-
-                # Shuffle the options so correct answer isn't always first
+                all_options = [{"lines": vuln_lines, "label": "", "correct": True}] + \
+                              [{"lines": d["lines"], "label": "", "correct": False} for d in distractors]
                 random.shuffle(all_options)
+                shuffled_options = [{"lines": o["lines"], "label": o["label"]} for o in all_options]
 
-                # Remove the "correct" flag before sending to frontend
-                shuffled_options = [{"lines": opt["lines"], "label": opt["label"]} for opt in all_options]
-
-                # Build final options list: correct answer + distractors
                 artifact = {
                     **bundle,
                     "options": shuffled_options,
@@ -272,6 +278,7 @@ def generate_challenge(generation_id: int):
                         "secure": secure_results,
                         "insecure": insecure_results,
                         "attempt": attempt,
+                        "bandit": bandit_result,
                     },
                 }
 
@@ -333,11 +340,14 @@ def _generate_and_save_challenge(vuln_type=None, is_pooled=False, status='pendin
         tests = bundle["tests"]
         vuln_lines = bundle["vulnerable_lines"]
 
-        if len(secure_code.strip().splitlines()) < 20 or len(insecure_code.strip().splitlines()) < 20:
+        if len(secure_code.strip().splitlines()) < CODE_MIN_LINES or \
+                len(insecure_code.strip().splitlines()) < CODE_MIN_LINES:
             continue
-        if len(secure_code.strip().splitlines()) > 35 or len(insecure_code.strip().splitlines()) > 35:
+        if len(secure_code.strip().splitlines()) > CODE_MAX_LINES or \
+                len(insecure_code.strip().splitlines()) > CODE_MAX_LINES:
             continue
 
+        # --- Verification agent: Docker test execution ---
         secure_results = run_in_container({"code": secure_code, "tests": tests})
         insecure_results = run_in_container({"code": insecure_code, "tests": tests})
 
@@ -347,41 +357,12 @@ def _generate_and_save_challenge(vuln_type=None, is_pooled=False, status='pendin
         if not (secure_ok and insecure_ok):
             continue
 
-        # Build distractor options
+        # --- Static analysis agent: Bandit ---
+        bandit_result = check_challenge_with_bandit(insecure_code, secure_code, vuln_type)
+
+        # --- Distractor generation (LLM-first, heuristic fallback) ---
         code_lines = insecure_code.splitlines()
-        total_lines = len(code_lines)
-        all_line_numbers = set(range(1, total_lines + 1))
-        vuln_line_set = set(vuln_lines)
-        available_lines = sorted(all_line_numbers - vuln_line_set)
-        use_ranges = len(vuln_lines) > 1
-
-        candidate_lines = [
-            ln for ln in available_lines
-            if code_lines[ln - 1].strip() and code_lines[ln - 1].strip() not in ['{', '}', '(', ')', '"""', "'''", "''", '""']
-        ]
-
-        distractors = []
-        if len(candidate_lines) >= 3:
-            anchors = [candidate_lines[0], candidate_lines[len(candidate_lines) // 2], candidate_lines[-1]]
-            for anchor in anchors:
-                if use_ranges:
-                    start = max(1, anchor - random.randint(0, 1))
-                    end = min(total_lines, start + random.choice([2, 3]) - 1)
-                    lr = list(range(start, end + 1))
-                    if not any(l in vuln_lines for l in lr):
-                        distractors.append({"lines": lr, "label": ""})
-                else:
-                    if random.random() < 0.5 and anchor < total_lines - 1:
-                        sz = random.choice([2, 3])
-                        lr = [anchor + i for i in range(min(sz, total_lines - anchor + 1))]
-                        if not any(l in vuln_lines for l in lr):
-                            distractors.append({"lines": lr, "label": ""})
-                    else:
-                        distractors.append({"lines": [anchor], "label": ""})
-
-        while len(distractors) < 3:
-            anchor = random.choice(candidate_lines) if candidate_lines else 1
-            distractors.append({"lines": [anchor], "label": ""})
+        distractors = _build_distractor_options(bundle, code_lines, vuln_lines)
 
         all_options = [{"lines": vuln_lines, "label": "", "correct": True}] + \
                       [{"lines": d["lines"], "label": "", "correct": False} for d in distractors]
@@ -391,7 +372,12 @@ def _generate_and_save_challenge(vuln_type=None, is_pooled=False, status='pendin
         artifact = {
             **bundle,
             "options": shuffled_options,
-            "verification": {"secure": secure_results, "insecure": insecure_results, "attempt": attempt},
+            "verification": {
+                "secure": secure_results,
+                "insecure": insecure_results,
+                "attempt": attempt,
+                "bandit": bandit_result,
+            },
         }
 
         gr = GenerationRequest.objects.create(status="done")
@@ -460,4 +446,17 @@ def fill_review_queue():
             added += 1
 
     logger.info("Review queue fill complete. Added %d challenges.", added)
+    return added
+
+
+@shared_task
+def fill_review_queue_for_type(vuln_type, count=10):
+    """Generate `count` challenges of a specific vulnerability type for the admin review queue."""
+    logger.info("Review queue targeted fill: vuln_type=%s, count=%d", vuln_type, count)
+    added = 0
+    for _ in range(count):
+        ch = _generate_and_save_challenge(vuln_type=vuln_type, is_pooled=False, status='pending_review')
+        if ch:
+            added += 1
+    logger.info("Targeted fill complete. Added %d/%d %s challenges.", added, count, vuln_type)
     return added

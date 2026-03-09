@@ -84,20 +84,34 @@ CHALLENGE_SCHEMA: Dict[str, Any] = {
                 "minItems": 1
             },
 
+            "distractor_options": {
+                "type": "array",
+                "description": "Exactly 3 plausible-but-wrong line-number groups from insecure_code",
+                "items": {
+                    "type": "array",
+                    "items": {"type": "integer", "minimum": 1},
+                    "minItems": 1
+                },
+                "minItems": 3,
+                "maxItems": 3
+            },
+
             "explanation": {
                 "type": "object",
                 "additionalProperties": False,
                 "properties": {
                     "short": {"type": "string"},
-                    "fix": {"type": "string"}
+                    "fix": {"type": "string"},
+                    "correct_hint": {"type": "string"},
+                    "wrong_hint": {"type": "string"}
                 },
-                "required": ["short", "fix"]
+                "required": ["short", "fix", "correct_hint", "wrong_hint"]
             }
         },
         "required": [
             "language", "vuln_type", "difficulty",
             "secure_code", "insecure_code", "tests",
-            "vulnerable_lines", "explanation"
+            "vulnerable_lines", "distractor_options", "explanation"
         ]
     },
     "strict": True
@@ -111,8 +125,8 @@ SQL INJECTION constraints:
 - secure_code MUST use parameterized queries: cursor.execute("SELECT ... WHERE col = ?", (value,))
 - insecure_code MUST use f-string: cursor.execute(f"SELECT ... WHERE col = {value}")
 - The function should NOT create tables or insert data - it only queries an existing database
-- CRITICAL: Aim for exactly 25 lines per version. Do NOT exceed 30 lines.
 - Include: module docstring (3 lines), import sqlite3 + typing, function with docstring, query logic, error handling
+- Aim for 28-40 lines per version. Both versions must be the same length.
 - The TEST must create the in-memory database, create table, insert rows, then call the function
 - Test verifies: normal input returns data, SQL injection input like "1 OR 1=1" returns None (secure) vs all rows (insecure)
 """,
@@ -131,7 +145,7 @@ XSS (Cross-Site Scripting) constraints:
   6. Input validation for None/empty with defaults (2-3 lines)
   7. HTML string construction with 4 tags: div, h1, p, span (5-6 lines)
   8. Return statement (1 line)
-- This gives 22-26 lines per version. BOTH versions must be 20-30 lines. Do NOT exceed 30.
+- This gives 25-35 lines per version. BOTH versions must be the same length.
 - Test verifies '<script>alert(1)</script>' is escaped (secure) vs present as-is (insecure)
 """,
     "path_traversal": """
@@ -150,8 +164,7 @@ PATH TRAVERSAL constraints:
   7. Security checks in secure / comments in insecure (3-4 lines)
   8. Path construction with os.path.join (2-3 lines)
   9. Return statement (1 line)
-- This gives 22-25 lines per version. BOTH versions MUST be 20-30 lines. DO NOT open/read files.
-- CRITICAL: Code under 20 lines will be REJECTED. Include ALL numbered sections above.
+- This gives 25-35 lines per version. BOTH versions MUST be the same length. DO NOT open/read files.
 - Test verifies '../../etc/passwd' returns None (secure) vs path string (insecure, test fails)
 """,
     "cmdi": """
@@ -172,7 +185,7 @@ COMMAND INJECTION constraints:
   8. Try block: subprocess.run call with shell=False (secure) or shell=True (insecure) (3-4 lines)
   9. Process and return result (2 lines)
   10. Except block with error handling (2-3 lines)
-- This gives 24-28 lines per version. BOTH versions must be 20-30 lines.
+- This gives 28-40 lines per version. BOTH versions must be the same length.
 - Tests MUST use unittest.mock.patch to mock subprocess.run - NEVER execute real commands
 - Test must verify secure uses shell=False and insecure uses shell=True
 """,
@@ -196,7 +209,7 @@ XXE (XML External Entity) constraints:
   10. Build result dict (2 lines)
   11. Return result dict (1 line)
   12. Except block with error handling (2-3 lines)
-- This gives 24-30 lines per version. BOTH versions must be 20-30 lines.
+- This gives 28-40 lines per version. BOTH versions must be the same length.
 - Test provides XML with <!ENTITY> or <!DOCTYPE>, verifies secure blocks it
 """,
     "insecure_deser": """
@@ -217,7 +230,7 @@ INSECURE DESERIALIZATION constraints:
   9. Validate result type is dict (2 lines)
   10. Return result (1 line)
   11. Except block with error handling (2-3 lines)
-- This gives 22-27 lines per version. CRITICAL: Do NOT exceed 30 lines.
+- This gives 25-35 lines per version. BOTH versions must be the same length.
 - Test provides base64-encoded JSON data and verifies both can parse it
 - Test also provides pickle-specific data that only insecure version processes unsafely
 """,
@@ -240,7 +253,7 @@ SSRF (Server-Side Request Forgery) constraints:
   8. hostname = parsed.hostname (1 line)
   9. IP check: secure checks hostname against ("127.0.0.1","localhost","10.","192.168.") / insecure has comment (3 lines)
   10. Return url (1 line)
-- CRITICAL: Do NOT exceed 30 lines. Aim for exactly 24 lines. Keep docstrings SHORT (1-line).
+- Aim for 28-40 lines. BOTH versions must be the same length. Keep docstrings concise.
 - Use ONLY urllib.parse (no socket, no requests)
 - Test verifies http://127.0.0.1/admin returns None (secure) vs URL string (insecure, test fails)
 """,
@@ -261,7 +274,7 @@ WEAK CRYPTOGRAPHY constraints:
   7. Generate salt in secure / empty salt in insecure (2 lines)
   8. Hash computation: sha256 with salt (secure) / md5 without salt (insecure) (2-3 lines)
   9. Return (hash_hex, salt) tuple (1 line)
-- This gives 20-25 lines per version. BOTH versions must be 20-30 lines.
+- This gives 25-35 lines per version. BOTH versions must be the same length.
 - Test verifies: secure returns non-empty salt, insecure returns empty salt
 - Test also checks that same password produces different hashes with secure (due to random salt)
 """,
@@ -284,7 +297,7 @@ HARDCODED CREDENTIALS constraints:
   10. Get host: os.environ.get("DB_HOST", "localhost") in both (1 line)
   11. Build config dict with username/password/host/app_name (3 lines)
   12. Return config (1 line)
-- This gives 22-26 lines per version. CRITICAL: Do NOT exceed 28 lines. Do NOT raise ValueError.
+- This gives 25-35 lines per version. BOTH versions must be the same length. Do NOT raise ValueError.
 - CRITICAL TEST REQUIREMENT: The test MUST set environment variables BEFORE calling the secure function:
   os.environ["DB_USERNAME"] = "env_user"
   os.environ["DB_PASSWORD"] = "env_pass"
@@ -311,7 +324,7 @@ AUTHENTICATION BYPASS constraints:
   8. Hash password, lookup user in USER_DB (2 lines)
   9. Check credentials: 'and' (secure) vs 'or' (insecure) (2-3 lines)
   10. Return result (1 line)
-- CRITICAL: Aim for exactly 24 lines. Maximum 30 lines. Keep USER_DB on ONE line.
+- Aim for 28-40 lines. BOTH versions must be the same length. Keep USER_DB on ONE line.
 - Test verifies wrong password returns None (secure) but returns user (insecure, test fails)
 """,
 }
@@ -327,18 +340,23 @@ UNIVERSAL Constraints:
   (3) import from 'snippet' module (e.g., 'from snippet import function_name')
 - The tests should be deterministic and self-contained
 - vulnerable_lines should point to the vulnerable statement(s) in insecure_code
+- explanation fields:
+  - short: one sentence describing what the vulnerability is
+  - fix: one sentence describing how the secure version fixes it
+  - correct_hint: shown when the user correctly identifies the vulnerable lines — reinforce WHY those lines are the problem, e.g. "Correct! Line 18 uses an f-string to build the SQL query with user input directly, enabling SQL injection."
+  - wrong_hint: shown when the user picks wrong lines — guide them toward the real issue without giving it away, e.g. "Those lines handle input validation, not query execution. Look for where user-supplied data reaches the database or system command."
 - CRITICAL: Both secure_code and insecure_code must define the EXACT SAME function name
 
 === CRITICAL CODE LENGTH REQUIREMENT - READ CAREFULLY ===
-CODE MUST BE EXACTLY 20-35 LINES. This is MANDATORY and AUTOMATICALLY VERIFIED.
-- Code under 20 lines will be AUTOMATICALLY REJECTED by the system
-- Code over 35 lines will be AUTOMATICALLY REJECTED by the system
-- BOTH secure_code AND insecure_code must be 20-35 lines - count before responding!
+CODE MUST BE EXACTLY 25-50 LINES. This is MANDATORY and AUTOMATICALLY VERIFIED.
+- Code under 25 lines will be AUTOMATICALLY REJECTED by the system
+- Code over 60 lines will be AUTOMATICALLY REJECTED by the system
+- BOTH secure_code AND insecure_code must be 25-50 lines - count before responding!
 - CRITICAL: Make both versions SAME LENGTH (within 1-2 lines) - they should have identical structure
 - The ONLY difference between versions should be the security fix itself
-- Use empty lines, multi-line docstrings, helper functions, and detailed logic to reach 20 lines in BOTH versions
+- Use empty lines, multi-line docstrings, helper functions, and detailed logic to reach 25 lines in BOTH versions
 
-HOW TO REACH 20+ LINES (REQUIRED):
+HOW TO REACH 25+ LINES (REQUIRED):
 1. Add module-level docstring (3-4 lines)
 2. Import statements (2-3 lines): import os, import sys, from datetime import datetime, etc.
 3. Helper functions or constants (3-5 lines)
@@ -349,7 +367,7 @@ HOW TO REACH 20+ LINES (REQUIRED):
 8. Error handling or logging (2-3 lines)
 9. Return statement with formatting (1-2 lines)
 
-EXAMPLE STRUCTURE (24 lines total):
+EXAMPLE STRUCTURE (30 lines total):
 Line 1: Module docstring start
 Line 2: Docstring content
 Line 3: Docstring end
@@ -357,16 +375,23 @@ Line 4: Empty line
 Line 5: import sqlite3
 Line 6: from typing import Optional
 Line 7: Empty line
-Line 8: def get_user_by_id(user_id: int, db_path: str = "users.db"):
-Line 9:     Function docstring
-Line 10-15: More docstring (Args, Returns, etc)
-Line 16:     Input validation
-Line 17:     Create connection
-Line 18:     Execute query
-Line 19:     Fetch result
-Line 20:     Close connection
-Line 21:     return result
-Lines 22-24: Additional logic, error handling, etc.
+Line 8: MAX_RETRIES = 3
+Line 9: Empty line
+Line 10: def get_user_by_id(conn, user_id: str):
+Line 11:     Function docstring start
+Line 12:     Args section
+Line 13:     Returns section
+Line 14:     Function docstring end
+Line 15:     if not user_id:
+Line 16:         return None
+Line 17:     cursor = conn.cursor()
+Line 18:     cursor.execute(f"SELECT * FROM users WHERE id = {user_id}")  # insecure
+Line 19:     result = cursor.fetchone()
+Line 20:     cursor.close()
+Line 21:     if result is None:
+Line 22:         return None
+Line 23:     return {"id": result[0], "name": result[1], "email": result[2]}
+Lines 24-30: Additional helpers, logging, type annotations, etc.
 
 - IMPORTANT: Test code will run against code saved as 'snippet.py', so use 'from snippet import ...'
 
@@ -393,6 +418,31 @@ def test_security_check():
     # Insecure: allows attack, returns data, executes code
     assert function('malicious_input') is None  # or appropriate secure behavior
 ```
+
+=== DISTRACTOR OPTIONS - READ CAREFULLY ===
+distractor_options: Provide EXACTLY 3 arrays of line numbers from insecure_code that are
+plausible-looking WRONG answers for the multiple-choice question.
+
+RULES FOR DISTRACTORS:
+1. Each distractor must reference only EXECUTABLE STATEMENTS:
+   - Assignments (x = ...), function calls, return statements, conditionals, loops
+2. NEVER reference these line types:
+   - Comment lines (lines starting with #)
+   - Blank/empty lines
+   - Docstring delimiter lines (lines that are just \"\"\" or \'\'\')
+   - Pure docstring content lines (lines inside triple quotes that aren't code)
+   - Import statements
+3. Choose lines that LOOK security-relevant but are NOT the actual vulnerability:
+   - Input validation checks (look like they could be the fix)
+   - Result processing after the vulnerable call
+   - Error handling blocks
+   - Lines with variables named 'user', 'input', 'data', 'query', etc. (but not the vulnerable one)
+4. Each distractor should be pedagogically meaningful: a student who picks it would be making
+   a reasonable but incorrect inference about where the vulnerability lies.
+
+Example for a SQLi challenge with vulnerable line 18 (f-string query):
+  distractor_options: [[15, 16], [19, 20], [22]]
+  Where 15-16 are input validation, 19-20 are result fetching, 22 is a return statement.
 """
 
 def generate_with_openai(vuln_type: str, seed_topic: str, difficulty: str = "easy") -> Dict[str, Any]:
@@ -440,10 +490,17 @@ You MUST respond with valid JSON matching this exact schema:
   "secure_code": "complete Python code implementing the secure version",
   "insecure_code": "complete Python code with the vulnerability",
   "tests": "complete Python test code that imports from 'snippet' module",
-  "vulnerable_lines": [array of line numbers in insecure_code],
+  "vulnerable_lines": [array of line numbers in insecure_code that contain the vulnerability],
+  "distractor_options": [
+    [line numbers for first wrong-answer option — executable statements only, NO comments/blanks],
+    [line numbers for second wrong-answer option — executable statements only, NO comments/blanks],
+    [line numbers for third wrong-answer option — executable statements only, NO comments/blanks]
+  ],
   "explanation": {{
     "short": "brief description of the vulnerability",
-    "fix": "how to fix it"
+    "fix": "how to fix it",
+    "correct_hint": "feedback shown when user correctly identifies the vulnerable lines",
+    "wrong_hint": "feedback shown when user picks the wrong lines"
   }}
 }}
 
@@ -517,9 +574,25 @@ Respond ONLY with the JSON, no other text."""
         lines_str = vuln_lines_match.group(1)
         vulnerable_lines = [int(x.strip()) for x in lines_str.split(',') if x.strip().isdigit()]
 
+    # Extract distractor_options (array of arrays)
+    distractor_options: list = []
+    distractor_match = re.search(
+        r'"distractor_options":\s*\[(.*?)\](?=\s*[,}]|\s*$)',
+        content, re.DOTALL
+    )
+    if distractor_match:
+        inner = distractor_match.group(1)
+        # Each inner array looks like [n, m, ...]
+        for arr_match in re.finditer(r'\[([\d,\s]+)\]', inner):
+            nums = [int(x.strip()) for x in arr_match.group(1).split(',') if x.strip().isdigit()]
+            if nums:
+                distractor_options.append(nums)
+
     # Extract explanation object
     short_exp = extract_field("short", content) or "SQL injection vulnerability"
     fix_exp = extract_field("fix", content) or "Use parameterized queries"
+    correct_hint = extract_field("correct_hint", content) or "Correct! Those are the vulnerable lines."
+    wrong_hint = extract_field("wrong_hint", content) or "Look more carefully at where user input is used without sanitization."
 
     if not all([secure_code, insecure_code, tests]):
         raise ValueError(f"Could not extract required fields from Claude's response. Content: {content[:500]}")
@@ -533,9 +606,12 @@ Respond ONLY with the JSON, no other text."""
         "insecure_code": insecure_code,
         "tests": tests,
         "vulnerable_lines": vulnerable_lines if vulnerable_lines else [1],
+        "distractor_options": distractor_options,
         "explanation": {
             "short": short_exp,
-            "fix": fix_exp
+            "fix": fix_exp,
+            "correct_hint": correct_hint,
+            "wrong_hint": wrong_hint,
         }
     }
 
