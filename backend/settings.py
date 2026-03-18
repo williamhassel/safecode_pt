@@ -164,3 +164,11 @@ CELERY_RESULT_BACKEND = "redis://localhost:6379/0"
 CELERY_ACCEPT_CONTENT = ["json"]
 CELERY_TASK_SERIALIZER = "json"
 CELERY_RESULT_SERIALIZER = "json"
+
+from celery.schedules import crontab
+CELERY_BEAT_SCHEDULE = {
+    "refill-challenge-pool": {
+        "task": "backend.api.tasks.refill_pool_if_low",
+        "schedule": crontab(minute="*/5"),  # every 5 minutes
+    },
+}

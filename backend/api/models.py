@@ -105,3 +105,31 @@ class GeneratedChallenge(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     is_pooled = models.BooleanField(default=False)  # True = available in challenge pool
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='approved')
+
+
+class ChallengeSet(models.Model):
+    """A set of 10 challenges presented to the user in one sitting."""
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='challenge_sets')
+    started_at = models.DateTimeField(auto_now_add=True)
+    completed_at = models.DateTimeField(null=True, blank=True)
+    is_passed = models.BooleanField(default=False)  # True if score >= 80%
+    score = models.IntegerField(default=0)   # number of correct answers
+    total = models.IntegerField(default=10)  # total challenges in this set
+
+    def __str__(self):
+        return f"Set #{self.id} by {self.user.username} ({self.score}/{self.total})"
+
+
+class ChallengeSetItem(models.Model):
+    """One challenge slot within a ChallengeSet, with the user's answer recorded."""
+    challenge_set = models.ForeignKey(ChallengeSet, on_delete=models.CASCADE, related_name='items')
+    challenge = models.ForeignKey(GeneratedChallenge, on_delete=models.CASCADE)
+    position = models.IntegerField()          # 0-based order within the set
+    is_correct = models.BooleanField(null=True, blank=True)  # null until submitted
+
+    class Meta:
+        ordering = ['position']
+        unique_together = [('challenge_set', 'position')]
+
+    def __str__(self):
+        return f"Set #{self.challenge_set_id} item {self.position}"

@@ -4,6 +4,7 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-d
 import AuthPage from "./pages/AuthPage";
 import HomePage from "./pages/HomePage";
 import GamePage from "./pages/GamePage";
+import AdminPage from "./pages/AdminPage";
 
 function App() {
   const [authenticated, setAuthenticated] = useState(
@@ -23,6 +24,7 @@ function App() {
       <Routes>
         <Route path="/" element={<HomePage />} />
         <Route path="/game" element={<GamePage />} />
+        <Route path="/admin-review" element={<AdminPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </Router>

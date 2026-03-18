@@ -5,20 +5,22 @@ import "./AdminPage.css";
 
 // ---- Helpers ----------------------------------------------------------------
 
+const VULN_TYPES = [
+  { value: "sqli",            label: "SQL Injection" },
+  { value: "xss",             label: "XSS" },
+  { value: "path_traversal",  label: "Path Traversal" },
+  { value: "cmdi",            label: "Command Injection" },
+  { value: "xxe",             label: "XXE" },
+  { value: "insecure_deser",  label: "Insecure Deserialization" },
+  { value: "ssrf",            label: "SSRF" },
+  { value: "weak_crypto",     label: "Weak Crypto" },
+  { value: "hardcoded_creds", label: "Hardcoded Creds" },
+  { value: "auth_bypass",     label: "Auth Bypass" },
+];
+
 function vulnLabel(type) {
-  const map = {
-    sqli: "SQL Injection",
-    xss: "XSS",
-    path_traversal: "Path Traversal",
-    cmdi: "Command Injection",
-    xxe: "XXE",
-    insecure_deser: "Insecure Deserialization",
-    ssrf: "SSRF",
-    weak_crypto: "Weak Crypto",
-    hardcoded_creds: "Hardcoded Creds",
-    auth_bypass: "Auth Bypass",
-  };
-  return map[type] || type;
+  const found = VULN_TYPES.find((v) => v.value === type);
+  return found ? found.label : type;
 }
 
 function diffClass(d) {
@@ -27,20 +29,23 @@ function diffClass(d) {
   return "diff-hard";
 }
 
-// ---- Code display with highlighted vulnerable lines -------------------------
+// ---- Code display with highlighted lines ------------------------------------
 
-function AdminCodeBlock({ code, vulnerableLines = [] }) {
+function AdminCodeBlock({ code, highlightLines = [], highlightClass = "vuln-line" }) {
   if (!code) return null;
-  const vulnSet = new Set(vulnerableLines);
+  const highlightSet = new Set(highlightLines);
   const lines = code.split("\n");
   return (
     <div className="admin-code-wrap">
       <pre className="admin-code-block">
         {lines.map((line, i) => {
           const lineNum = i + 1;
-          const isVuln = vulnSet.has(lineNum);
+          const isHighlighted = highlightSet.has(lineNum);
           return (
-            <div key={i} className={`admin-code-line${isVuln ? " vuln-line" : ""}`}>
+            <div
+              key={i}
+              className={`admin-code-line${isHighlighted ? ` ${highlightClass}` : ""}`}
+            >
               <span className="admin-ln-number">{lineNum}</span>
               <span className="admin-ln-text">{line}</span>
             </div>
@@ -51,10 +56,53 @@ function AdminCodeBlock({ code, vulnerableLines = [] }) {
   );
 }
 
+// ---- Multiple-choice options display ----------------------------------------
+
+function OptionsDisplay({ options, vulnerableLines }) {
+  if (!options || options.length === 0) return null;
+
+  const vulnSet = new Set(vulnerableLines || []);
+
+  function isCorrectOption(opt) {
+    const optSet = new Set(opt.lines || []);
+    if (optSet.size !== vulnSet.size) return false;
+    for (const ln of vulnSet) {
+      if (!optSet.has(ln)) return false;
+    }
+    return true;
+  }
+
+  function formatLines(lines) {
+    if (!lines || lines.length === 0) return "—";
+    if (lines.length === 1) return `Line ${lines[0]}`;
+    const sorted = [...lines].sort((a, b) => a - b);
+    // Check if contiguous
+    const isRange = sorted.every((v, i) => i === 0 || v === sorted[i - 1] + 1);
+    if (isRange) return `Lines ${sorted[0]}–${sorted[sorted.length - 1]}`;
+    return `Lines ${sorted.join(", ")}`;
+  }
+
+  return (
+    <div className="options-list">
+      {options.map((opt, idx) => {
+        const correct = isCorrectOption(opt);
+        return (
+          <div key={idx} className={`option-row${correct ? " option-correct" : " option-distractor"}`}>
+            <span className="option-letter">{String.fromCharCode(65 + idx)}</span>
+            <span className="option-lines">{formatLines(opt.lines)}</span>
+            {correct && <span className="option-badge correct-badge">Correct answer</span>}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 // ---- Single expandable challenge card --------------------------------------
 
 function ChallengeCard({ challenge, onApprove, onDiscard, busy }) {
   const [expanded, setExpanded] = useState(false);
+  const [optionHighlight, setOptionHighlight] = useState(null); // lines to highlight in code
 
   const ver = challenge.verification || {};
   const securePass =
@@ -64,6 +112,9 @@ function ChallengeCard({ challenge, onApprove, onDiscard, busy }) {
 
   const shortDesc =
     challenge.explanation?.short || challenge.description || "";
+
+  const options = challenge.options || [];
+  const vulnerableLines = challenge.vulnerable_lines || [];
 
   return (
     <div className={`challenge-card${expanded ? " expanded" : ""}`}>
@@ -95,18 +146,76 @@ function ChallengeCard({ challenge, onApprove, onDiscard, busy }) {
             </>
           )}
 
-          {/* Insecure code with vuln lines highlighted */}
+          {/* Multiple-choice options */}
+          {options.length > 0 && (
+            <>
+              <div className="card-section-title">
+                Multiple-choice options
+                <span className="card-section-hint">
+                  &nbsp;— hover an option to highlight those lines in the code below
+                </span>
+              </div>
+              <div className="options-list">
+                {options.map((opt, idx) => {
+                  const correct = (() => {
+                    const vulnSet = new Set(vulnerableLines);
+                    const optSet = new Set(opt.lines || []);
+                    if (optSet.size !== vulnSet.size) return false;
+                    for (const ln of vulnSet) if (!optSet.has(ln)) return false;
+                    return true;
+                  })();
+                  const lines = opt.lines || [];
+                  const sorted = [...lines].sort((a, b) => a - b);
+                  const isRange = sorted.every(
+                    (v, i) => i === 0 || v === sorted[i - 1] + 1
+                  );
+                  const linesLabel =
+                    lines.length === 0
+                      ? "—"
+                      : lines.length === 1
+                      ? `Line ${lines[0]}`
+                      : isRange
+                      ? `Lines ${sorted[0]}–${sorted[sorted.length - 1]}`
+                      : `Lines ${sorted.join(", ")}`;
+                  return (
+                    <div
+                      key={idx}
+                      className={`option-row${correct ? " option-correct" : " option-distractor"}`}
+                      onMouseEnter={() => setOptionHighlight(lines)}
+                      onMouseLeave={() => setOptionHighlight(null)}
+                    >
+                      <span className="option-letter">
+                        {String.fromCharCode(65 + idx)}
+                      </span>
+                      <span className="option-lines">{linesLabel}</span>
+                      {correct && (
+                        <span className="option-badge correct-badge">
+                          Correct answer
+                        </span>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </>
+          )}
+
+          {/* Insecure code */}
           <div className="card-section-title">
-            Insecure code — vulnerable lines highlighted
+            Insecure code
+            {optionHighlight
+              ? " — highlighted: hovered option"
+              : " — highlighted: vulnerable lines"}
           </div>
           <AdminCodeBlock
             code={challenge.insecure_code}
-            vulnerableLines={challenge.vulnerable_lines || []}
+            highlightLines={optionHighlight ?? vulnerableLines}
+            highlightClass={optionHighlight ? "option-line" : "vuln-line"}
           />
 
           {/* Secure code */}
           <div className="card-section-title">Secure code (reference)</div>
-          <AdminCodeBlock code={challenge.secure_code} vulnerableLines={[]} />
+          <AdminCodeBlock code={challenge.secure_code} highlightLines={[]} />
 
           {/* Test verification results */}
           <div className="card-section-title">Test verification</div>
@@ -159,6 +268,9 @@ export default function AdminPage() {
   const [generating, setGenerating] = useState(false);
   const [actionBusy, setActionBusy] = useState(false);
 
+  // Vuln-type selector for targeted batch generation
+  const [selectedVulnType, setSelectedVulnType] = useState("");
+
   const pollRef = useRef(null);
 
   // --- Load current user first to check is_staff --------------------------
@@ -188,7 +300,6 @@ export default function AdminPage() {
       setPendingCount(data.pending_count || 0);
       setApprovedCount(data.approved_count || 0);
 
-      // If queue is still filling, keep polling
       if ((data.pending_count || 0) < 10) {
         setGenerating(true);
       } else {
@@ -207,7 +318,6 @@ export default function AdminPage() {
 
     fetchQueue();
 
-    // Poll every 8 seconds while generating
     pollRef.current = setInterval(() => {
       fetchQueue();
     }, 8000);
@@ -215,19 +325,26 @@ export default function AdminPage() {
     return () => clearInterval(pollRef.current);
   }, [user, fetchQueue]);
 
-  // Stop polling when queue is full
+  // Slow poll when queue is full
   useEffect(() => {
     if (!generating && pollRef.current) {
       clearInterval(pollRef.current);
-      pollRef.current = setInterval(fetchQueue, 30000); // slow poll
+      pollRef.current = setInterval(fetchQueue, 30000);
     }
   }, [generating, fetchQueue]);
 
-  // --- Trigger manual generation ------------------------------------------
+  // --- Trigger generation --------------------------------------------------
   const handleGenerateMore = async () => {
     setGenerating(true);
     try {
-      await postWithAuth("/admin/review-queue/", {});
+      if (selectedVulnType) {
+        await postWithAuth("/admin/generate-batch/", {
+          vuln_type: selectedVulnType,
+          count: 10,
+        });
+      } else {
+        await postWithAuth("/admin/review-queue/", {});
+      }
     } catch (err) {
       console.error("Failed to trigger generation:", err);
     }
@@ -242,7 +359,7 @@ export default function AdminPage() {
         setChallenges((prev) => prev.filter((c) => c.id !== id));
         setPendingCount((n) => Math.max(0, n - 1));
         setApprovedCount((n) => n + 1);
-        setGenerating(true); // generation was likely triggered server-side
+        setGenerating(true);
       }
     } catch (err) {
       console.error("Failed to approve challenge:", err);
@@ -297,6 +414,12 @@ export default function AdminPage() {
     );
   }
 
+  const generateLabel = selectedVulnType
+    ? `Generate 10 \u00d7 ${vulnLabel(selectedVulnType)}`
+    : generating
+    ? "Generating..."
+    : "Generate 10 (any type)";
+
   return (
     <div className="admin-root">
       {/* Navigation */}
@@ -348,15 +471,30 @@ export default function AdminPage() {
         <div className="admin-toolbar">
           <h2>
             Pending Challenges ({challenges.length}
-            {pendingCount > 10 ? `+` : ""})
+            {pendingCount > 10 ? "+" : ""})
           </h2>
-          <button
-            className="btn-generate"
-            disabled={generating || actionBusy}
-            onClick={handleGenerateMore}
-          >
-            {generating ? "Generating..." : "Generate More"}
-          </button>
+          <div className="toolbar-actions">
+            <select
+              className="vuln-type-select"
+              value={selectedVulnType}
+              onChange={(e) => setSelectedVulnType(e.target.value)}
+              disabled={actionBusy}
+            >
+              <option value="">Any vulnerability type</option>
+              {VULN_TYPES.map((v) => (
+                <option key={v.value} value={v.value}>
+                  {v.label}
+                </option>
+              ))}
+            </select>
+            <button
+              className="btn-generate"
+              disabled={actionBusy}
+              onClick={handleGenerateMore}
+            >
+              {generateLabel}
+            </button>
+          </div>
         </div>
 
         {/* Challenge list */}
@@ -380,13 +518,23 @@ export default function AdminPage() {
             ) : (
               <>
                 <p>No challenges pending review.</p>
-                <button
-                  className="btn-generate"
-                  style={{ marginTop: "0.75rem" }}
-                  onClick={handleGenerateMore}
-                >
-                  Generate Challenges
-                </button>
+                <div style={{ marginTop: "0.75rem", display: "flex", gap: "0.75rem", justifyContent: "center", flexWrap: "wrap" }}>
+                  <select
+                    className="vuln-type-select"
+                    value={selectedVulnType}
+                    onChange={(e) => setSelectedVulnType(e.target.value)}
+                  >
+                    <option value="">Any vulnerability type</option>
+                    {VULN_TYPES.map((v) => (
+                      <option key={v.value} value={v.value}>
+                        {v.label}
+                      </option>
+                    ))}
+                  </select>
+                  <button className="btn-generate" onClick={handleGenerateMore}>
+                    Generate Challenges
+                  </button>
+                </div>
               </>
             )}
           </div>

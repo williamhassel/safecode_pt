@@ -5,11 +5,12 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
 from django.shortcuts import get_object_or_404
 from django.contrib.auth.models import User
+from django.utils import timezone
 
-from .models import Challenge, Result, Certificate, GenerationRequest, GeneratedChallenge
+from .models import Challenge, Result, Certificate, GenerationRequest, GeneratedChallenge, ChallengeSet, ChallengeSetItem
 from .serializers import ChallengeSerializer, ResultSerializer, UserSerializer, RegisterSerializer
-from .utils import check_and_issue_certificate, get_user_stats
-from .tasks import generate_challenge, fill_review_queue
+from .utils import check_and_issue_certificate, get_user_stats, check_and_issue_certificate_sets
+from .tasks import generate_challenge, fill_review_queue, fill_review_queue_for_type, VULNERABILITY_TYPES
 
 
 class IsStaffUser(permissions.BasePermission):
@@ -38,15 +39,15 @@ class UserStatsView(APIView):
     def get(self, request):
         user = request.user
         total, correct, accuracy = get_user_stats(user)
-
-        # Check if user has earned certificate (8/10 requirement)
         has_certificate = Certificate.objects.filter(user=user).exists()
+        completed_sets = ChallengeSet.objects.filter(user=user, is_passed=True).count()
 
         return Response({
             "total_answered": total,
             "correct_answers": correct,
             "accuracy": accuracy,
             "has_certificate": has_certificate,
+            "completed_sets": completed_sets,
         })
 
 
@@ -243,6 +244,26 @@ class AdminChallengeDiscardView(APIView):
         return Response({"status": "discarded", "id": ch.id})
 
 
+class AdminGenerateBatchView(APIView):
+    """Generate N challenges of a specific vulnerability type for the admin review queue."""
+    permission_classes = [IsStaffUser]
+
+    def post(self, request):
+        vuln_type = request.data.get("vuln_type")
+        count = int(request.data.get("count", 10))
+
+        if not vuln_type:
+            return Response({"error": "vuln_type is required"}, status=status.HTTP_400_BAD_REQUEST)
+        if vuln_type not in VULNERABILITY_TYPES:
+            return Response(
+                {"error": f"Unknown vuln_type '{vuln_type}'. Valid types: {VULNERABILITY_TYPES}"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        fill_review_queue_for_type.delay(vuln_type, count)
+        return Response({"status": "generation triggered", "vuln_type": vuln_type, "count": count})
+
+
 class AdminPoolStatsView(APIView):
     """Quick stats snapshot for the admin dashboard."""
     permission_classes = [IsStaffUser]
@@ -252,4 +273,106 @@ class AdminPoolStatsView(APIView):
             "pending_review": GeneratedChallenge.objects.filter(status='pending_review').count(),
             "approved": GeneratedChallenge.objects.filter(status='approved', is_pooled=True).count(),
             "discarded": GeneratedChallenge.objects.filter(status='discarded').count(),
+        })
+
+
+# ---------------------------------------------------------------------------
+# Challenge set endpoints
+# ---------------------------------------------------------------------------
+
+SET_SIZE = 10
+REQUIRED_SETS_FOR_CERT = 10
+
+
+class SetNewView(APIView):
+    """Start a new set of SET_SIZE challenges for the authenticated user."""
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        user = request.user
+
+        # Prefer challenges the user hasn't seen in any previous set
+        seen_ids = ChallengeSetItem.objects.filter(
+            challenge_set__user=user
+        ).values_list('challenge_id', flat=True)
+
+        available = GeneratedChallenge.objects.filter(is_pooled=True).exclude(id__in=seen_ids)
+
+        if available.count() < SET_SIZE:
+            # Fall back to full pool when the user has seen most challenges
+            available = GeneratedChallenge.objects.filter(is_pooled=True)
+
+        if available.count() < SET_SIZE:
+            return Response(
+                {"error": "Not enough challenges in pool. Please check back soon."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        ids = random.sample(list(available.values_list('id', flat=True)), SET_SIZE)
+        challenges_map = {ch.id: ch for ch in GeneratedChallenge.objects.filter(id__in=ids)}
+
+        challenge_set = ChallengeSet.objects.create(user=user)
+        for position, cid in enumerate(ids):
+            ChallengeSetItem.objects.create(
+                challenge_set=challenge_set,
+                challenge_id=cid,
+                position=position,
+            )
+
+        serialized = [{"id": challenges_map[cid].id, **challenges_map[cid].artifact} for cid in ids]
+        return Response({"set_id": challenge_set.id, "challenges": serialized})
+
+
+class SetSubmitView(APIView):
+    """Submit answers for a completed challenge set."""
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, set_id):
+        user = request.user
+        challenge_set = get_object_or_404(ChallengeSet, id=set_id, user=user)
+
+        if challenge_set.completed_at is not None:
+            return Response({"error": "Set already submitted."}, status=status.HTTP_400_BAD_REQUEST)
+
+        answers = request.data.get('answers', [])
+        items = {item.challenge_id: item for item in challenge_set.items.all()}
+
+        score = 0
+        for answer in answers:
+            cid = int(answer['challenge_id'])
+            is_correct = bool(answer['is_correct'])
+
+            if cid in items:
+                item = items[cid]
+                item.is_correct = is_correct
+                item.save(update_fields=['is_correct'])
+
+            Result.objects.create(
+                user=user,
+                generated_challenge_id=cid,
+                is_correct=is_correct,
+                score=1 if is_correct else 0,
+            )
+
+            if is_correct:
+                score += 1
+
+        total = len(answers)
+        is_passed = (score / total) >= 0.8 if total > 0 else False
+
+        challenge_set.completed_at = timezone.now()
+        challenge_set.is_passed = is_passed
+        challenge_set.score = score
+        challenge_set.total = total
+        challenge_set.save()
+
+        completed_sets = ChallengeSet.objects.filter(user=user, is_passed=True).count()
+        certificate = check_and_issue_certificate_sets(user, required_sets=REQUIRED_SETS_FOR_CERT)
+
+        return Response({
+            "score": score,
+            "total": total,
+            "is_passed": is_passed,
+            "completed_sets": completed_sets,
+            "certificate_issued": certificate is not None,
         })

@@ -432,3 +432,140 @@
   display: inline-block;
   animation: spin 1s linear infinite;
 }
+
+/* ---- Toolbar actions group ---- */
+.toolbar-actions {
+  display: flex;
+  gap: 0.6rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+/* ---- Vuln type selector ---- */
+.vuln-type-select {
+  padding: 0.5rem 0.85rem;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: rgba(255, 255, 255, 0.07);
+  color: rgba(255, 255, 255, 0.85);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  outline: none;
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='%23aaa' d='M6 8L0 0h12z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.75rem center;
+  padding-right: 2.2rem;
+  transition: border-color 0.15s;
+}
+
+.vuln-type-select:hover:not(:disabled) {
+  border-color: rgba(102, 126, 234, 0.6);
+}
+
+.vuln-type-select:focus {
+  border-color: rgba(102, 126, 234, 0.8);
+  box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.2);
+}
+
+.vuln-type-select:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.vuln-type-select option {
+  background: #1a1a2e;
+  color: #e0e0e0;
+}
+
+/* ---- card-section-hint ---- */
+.card-section-hint {
+  font-size: 10px;
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: 0;
+  color: rgba(255, 255, 255, 0.3);
+}
+
+/* ---- Multiple-choice options list ---- */
+.options-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  margin-bottom: 0.25rem;
+}
+
+.option-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.45rem 0.85rem;
+  border-radius: 7px;
+  border: 1px solid transparent;
+  font-size: 13px;
+  cursor: default;
+  transition: background 0.12s, border-color 0.12s;
+}
+
+.option-row.option-distractor {
+  background: rgba(255, 255, 255, 0.04);
+  border-color: rgba(255, 255, 255, 0.07);
+}
+
+.option-row.option-distractor:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.15);
+}
+
+.option-row.option-correct {
+  background: rgba(40, 167, 69, 0.1);
+  border-color: rgba(40, 167, 69, 0.3);
+}
+
+.option-row.option-correct:hover {
+  background: rgba(40, 167, 69, 0.18);
+  border-color: rgba(40, 167, 69, 0.5);
+}
+
+.option-letter {
+  font-weight: 700;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.4);
+  width: 18px;
+  flex-shrink: 0;
+}
+
+.option-correct .option-letter {
+  color: #6ee7b7;
+}
+
+.option-lines {
+  flex: 1;
+  font-family: "Consolas", "JetBrains Mono", "Fira Code", monospace;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.75);
+}
+
+.option-badge {
+  padding: 0.15rem 0.55rem;
+  border-radius: 10px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  flex-shrink: 0;
+}
+
+.correct-badge {
+  background: rgba(40, 167, 69, 0.25);
+  color: #6ee7b7;
+  border: 1px solid rgba(40, 167, 69, 0.4);
+}
+
+/* ---- Hovered-option highlight in code ---- */
+.admin-code-line.option-line {
+  background: rgba(102, 126, 234, 0.18);
+  border-left: 3px solid #667eea;
+}

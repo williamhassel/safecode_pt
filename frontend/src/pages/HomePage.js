@@ -61,11 +61,10 @@ export default function HomePage() {
     );
   }
 
-  const progressPercentage = stats
-    ? Math.min((stats.correct_answers / 8) * 100, 100)
-    : 0;
-
-  const questionsRemaining = stats ? Math.max(8 - stats.correct_answers, 0) : 8;
+  const REQUIRED_SETS = 10;
+  const completedSets = stats?.completed_sets || 0;
+  const setsRemaining = Math.max(REQUIRED_SETS - completedSets, 0);
+  const progressPercentage = Math.min((completedSets / REQUIRED_SETS) * 100, 100);
 
   return (
     <div className="home-page">
@@ -106,7 +105,7 @@ export default function HomePage() {
             <div className="progress-header">
               <h4>Certificate Progress</h4>
               <span className="progress-text">
-                {stats?.correct_answers || 0} / 8 correct
+                {completedSets} / {REQUIRED_SETS} sets completed
               </span>
             </div>
             <div className="progress-bar">
@@ -122,17 +121,11 @@ export default function HomePage() {
               </div>
             ) : (
               <div className="progress-info">
-                {questionsRemaining > 0 ? (
-                  <p>
-                    Get {questionsRemaining} more correct answer
-                    {questionsRemaining !== 1 ? "s" : ""} to earn your certificate!
-                  </p>
-                ) : (
-                  <p>
-                    You have {stats?.correct_answers || 0} correct answers. Keep
-                    practicing to maintain 80% accuracy over 10 questions!
-                  </p>
-                )}
+                <p>
+                  {setsRemaining > 0
+                    ? `Complete ${setsRemaining} more set${setsRemaining !== 1 ? "s" : ""} (80%+ correct each) to earn your certificate!`
+                    : "You've completed all required sets — your certificate should be issued!"}
+                </p>
               </div>
             )}
           </div>

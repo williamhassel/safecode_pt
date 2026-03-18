@@ -20,6 +20,9 @@ from backend.api.views import (
     AdminChallengeApproveView,
     AdminChallengeDiscardView,
     AdminPoolStatsView,
+    AdminGenerateBatchView,
+    SetNewView,
+    SetSubmitView,
 )
 
 router = routers.DefaultRouter()
@@ -54,4 +57,9 @@ urlpatterns = [
     path('api/admin/challenges/<int:challenge_id>/approve/', AdminChallengeApproveView.as_view(), name='admin-challenge-approve'),
     path('api/admin/challenges/<int:challenge_id>/discard/', AdminChallengeDiscardView.as_view(), name='admin-challenge-discard'),
     path('api/admin/pool-stats/', AdminPoolStatsView.as_view(), name='admin-pool-stats'),
+    path('api/admin/generate-batch/', AdminGenerateBatchView.as_view(), name='admin-generate-batch'),
+
+    # Challenge sets
+    path('api/sets/new/', SetNewView.as_view(), name='set-new'),
+    path('api/sets/<int:set_id>/submit/', SetSubmitView.as_view(), name='set-submit'),
 ]

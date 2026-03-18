@@ -56,41 +56,33 @@
   line-height: 1.5;
 }
 
-/* Godot container */
+/* Code display container */
 .godot-window {
   width: 800px;
-  height: 400px;
+  max-height: 480px;
   margin: 0 auto 1rem;
-  background: white;
+  background: #f8f8f8;
   border: 3px solid #ffa500;
   border-radius: 12px;
-  overflow: auto;
+  overflow-y: auto;
   box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
 }
-
-/* Make iframe fill the container */
-.godot-window iframe {
-  width: 100%;
-  height: 100%;
-  border: none;
-}
-
 
 /* Code block styling */
 .code-block {
   width: 100%;
-  height: 100%;
-  overflow: auto;
+  overflow: visible;
   text-align: left;
   background: transparent;
   border: none;
   margin: 0;
-  padding: 6px;
+  padding: 12px 8px;
   box-sizing: border-box;
-  font-family: "Courier New", Monaco, "Lucida Console", monospace;
-  font-size: 14px;
-  color: #f1f1f1;
-  line-height: 1.45;
+  font-family: "Consolas", "JetBrains Mono", "Fira Code", "Cascadia Code", "Courier New", monospace;
+  font-size: 14.5px;
+  color: #1e1e1e;
+  line-height: 1.7;
+  letter-spacing: 0.01em;
 }
 
 /* Single visual line row containing number and text */
@@ -101,20 +93,21 @@
 
 /* left column: line number */
 .ln-number {
-  width: 36px;
+  width: 40px;
   text-align: right;
-  padding-right: 12px;
-  color: #bfbfbf;
+  padding-right: 16px;
+  color: #aaa;
   user-select: none;
+  flex-shrink: 0;
 }
 
 /* right column: actual code text */
 .ln-text {
   flex: 1;
-  color: #f1f1f1;
+  color: #1e1e1e;
 }
 
-/* Options list */
+/* Options form wrapper */
 .options-form {
   max-width: 800px;
   margin: 0 auto;
@@ -122,36 +115,62 @@
   text-align: left;
 }
 
-.options-list {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
+/* 2x2 grid of option buttons */
+.options-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
   padding: 1rem;
   background: white;
   border-radius: 12px;
   box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
 }
 
-.option {
+.option-card {
   display: flex;
-  align-items: center;
-  gap: 10px;
-  font-size: 15px;
-  color: #333;
-  padding: 0.5rem;
-  border-radius: 8px;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  padding: 1rem 1.25rem;
+  border-radius: 10px;
+  border: 2px solid #e0e0e0;
+  background: #fafafa;
   cursor: pointer;
-  transition: background 0.2s ease;
+  text-align: left;
+  font-family: inherit;
+  transition: border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
 }
 
-.option:hover {
-  background: #f8f9fa;
+.option-card:hover:not(.disabled) {
+  border-color: #667eea;
+  background: #f0f2ff;
+  box-shadow: 0 2px 8px rgba(102, 126, 234, 0.2);
 }
 
-.option input[type="radio"] {
-  width: 20px;
-  height: 20px;
-  cursor: pointer;
+.option-card.selected {
+  border-color: #667eea;
+  background: #eef0ff;
+  box-shadow: 0 2px 10px rgba(102, 126, 234, 0.25);
+}
+
+.option-card.disabled {
+  cursor: default;
+  opacity: 0.7;
+}
+
+.option-card-line {
+  font-size: 16px;
+  font-weight: 700;
+  color: #1a1a2e;
+  font-family: "Segoe UI", "Inter", "Helvetica Neue", Arial, sans-serif;
+  letter-spacing: 0.01em;
+}
+
+.option-card-label {
+  font-size: 13px;
+  color: #555;
+  line-height: 1.4;
+  font-family: "Segoe UI", "Inter", "Helvetica Neue", Arial, sans-serif;
 }
 
 /* actions and feedback */
@@ -228,7 +247,205 @@
   font-size: 1.1rem;
 }
 
-/* Responsive design */
+/* ── Option card feedback states ──────────────────────────────────────── */
+.option-card.correct-answer {
+  border-color: #28a745;
+  background: #d4edda;
+}
+
+.option-card.wrong-answer {
+  border-color: #dc3545;
+  background: #f8d7da;
+}
+
+/* ── Progress dots ────────────────────────────────────────────────────── */
+.set-progress-bar {
+  max-width: 800px;
+  margin: 0 auto 1rem;
+  padding: 0 1rem;
+  text-align: center;
+}
+
+.set-progress-text {
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.85);
+  margin-bottom: 0.5rem;
+  font-weight: 500;
+}
+
+.set-progress-track {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+}
+
+.set-progress-dot {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.25);
+  border: 2px solid rgba(255, 255, 255, 0.4);
+  transition: background 0.2s ease;
+}
+
+.set-progress-dot.dot-current {
+  background: white;
+  border-color: white;
+}
+
+.set-progress-dot.dot-correct {
+  background: #28a745;
+  border-color: #28a745;
+}
+
+.set-progress-dot.dot-incorrect {
+  background: #dc3545;
+  border-color: #dc3545;
+}
+
+/* ── Next button variant ──────────────────────────────────────────────── */
+.next-btn {
+  margin-left: auto;
+}
+
+/* ── Summary screen ───────────────────────────────────────────────────── */
+.summary-container {
+  max-width: 680px;
+  margin: 0 auto;
+  padding: 1.5rem 1rem 3rem;
+  text-align: center;
+}
+
+.summary-score {
+  font-size: 4rem;
+  font-weight: 800;
+  line-height: 1;
+  margin: 0.5rem 0 0.25rem;
+}
+
+.summary-score.passed {
+  color: #d4edda;
+  text-shadow: 0 2px 10px rgba(40, 167, 69, 0.5);
+}
+
+.summary-score.failed {
+  color: #f8d7da;
+  text-shadow: 0 2px 10px rgba(220, 53, 69, 0.4);
+}
+
+.summary-pct {
+  font-size: 1.1rem;
+  color: rgba(255, 255, 255, 0.8);
+  margin: 0 0 1rem;
+}
+
+.summary-message {
+  font-size: 1rem;
+  margin-bottom: 1.5rem;
+  font-weight: 500;
+}
+
+.summary-message.passed-msg { color: #d4edda; }
+.summary-message.failed-msg { color: #f8d7da; }
+
+.summary-results-list {
+  background: white;
+  border-radius: 12px;
+  padding: 1rem;
+  margin-bottom: 1.5rem;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.2);
+}
+
+.summary-result-item {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.5rem 0.75rem;
+  border-radius: 8px;
+  margin-bottom: 4px;
+  font-size: 14px;
+}
+
+.summary-result-item:last-child { margin-bottom: 0; }
+
+.summary-result-item.correct {
+  background: #f0fff4;
+  color: #155724;
+}
+
+.summary-result-item.incorrect {
+  background: #fff5f5;
+  color: #721c24;
+}
+
+.summary-result-num {
+  width: 24px;
+  font-weight: 700;
+  color: inherit;
+  flex-shrink: 0;
+  text-align: right;
+}
+
+.summary-result-icon {
+  font-size: 16px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.summary-result-type {
+  text-transform: capitalize;
+  flex: 1;
+  text-align: left;
+}
+
+/* ── Set progress bar ─────────────────────────────────────────────────── */
+.summary-progress {
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 12px;
+  padding: 1rem 1.25rem;
+  margin-bottom: 1.25rem;
+  color: white;
+}
+
+.summary-progress p {
+  margin: 0 0 0.6rem;
+  font-size: 15px;
+}
+
+.progress-bar-track {
+  height: 12px;
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.progress-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #56cc9d, #28a745);
+  border-radius: 6px;
+  transition: width 0.5s ease;
+}
+
+/* ── Certificate banner ───────────────────────────────────────────────── */
+.summary-cert {
+  background: linear-gradient(135deg, #f6d365, #fda085);
+  color: #5a3000;
+  border-radius: 12px;
+  padding: 1rem 1.5rem;
+  font-weight: 700;
+  font-size: 15px;
+  margin-bottom: 1.25rem;
+  box-shadow: 0 4px 20px rgba(253, 160, 133, 0.4);
+}
+
+.summary-actions {
+  display: flex;
+  justify-content: center;
+  gap: 1rem;
+}
+
+/* ── Responsive design */
 @media (max-width: 850px) {
   .godot-window,
   .options-form {
@@ -237,7 +454,7 @@
   }
 
   .godot-window {
-    height: 350px;
+    max-height: 400px;
   }
 
   .title {

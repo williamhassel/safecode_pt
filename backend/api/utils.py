@@ -33,3 +33,30 @@ def check_and_issue_certificate(user, min_questions=100, threshold=0.80):
         accuracy_at_issue=accuracy,
         total_questions_at_issue=total,
     )
+
+
+def check_and_issue_certificate_sets(user, required_sets=10):
+    """Issue a certificate when the user has completed `required_sets` passed sets."""
+    from .models import ChallengeSet
+    completed = ChallengeSet.objects.filter(user=user, is_passed=True).count()
+
+    if completed < required_sets:
+        return None
+
+    already_has = Certificate.objects.filter(
+        user=user,
+        min_questions=required_sets,
+        threshold_accuracy=0.80,
+    ).exists()
+
+    if already_has:
+        return None
+
+    total_questions = Result.objects.filter(user=user).count()
+    return Certificate.objects.create(
+        user=user,
+        threshold_accuracy=0.80,
+        min_questions=required_sets,
+        accuracy_at_issue=float(completed) / required_sets,
+        total_questions_at_issue=total_questions,
+    )
